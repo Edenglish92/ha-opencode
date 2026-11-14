@@ -14,7 +14,7 @@ jobs:
     name: Home Assistant add-on linter
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: frenck/action-addon-linter@v2
         with:
           path: "./opencode_vscode"
@@ -23,7 +23,7 @@ jobs:
     name: ShellCheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ludeeus/action-shellcheck@2.0.0
         with:
           scandir: "./opencode_vscode"
@@ -32,7 +32,7 @@ jobs:
     name: Hadolint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: opencode_vscode/Dockerfile
@@ -41,7 +41,7 @@ jobs:
     name: yamllint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ibiqlik/action-yamllint@v3
         with:
           file_or_dir: opencode_vscode
@@ -54,7 +54,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
