@@ -5,7 +5,7 @@
 **An OpenCode server _and_ a VS Code tunnel, side by side, on your Home Assistant box — Raspberry Pi (aarch64) and x86-64.**
 
 [![Home Assistant App](https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
-[![Architecture](https://img.shields.io/badge/arch-aarch64-blue)](https://github.com/Edenglish92/ha-opencode)
+[![Architecture](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue)](https://github.com/Edenglish92/ha-opencode)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Build](https://github.com/Edenglish92/ha-opencode/actions/workflows/build.yml/badge.svg)](https://github.com/Edenglish92/ha-opencode/actions/workflows/build.yml)
 [![Lint](https://github.com/Edenglish92/ha-opencode/actions/workflows/lint.yml/badge.svg)](https://github.com/Edenglish92/ha-opencode/actions/workflows/lint.yml)

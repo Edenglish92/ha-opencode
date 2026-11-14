@@ -6,7 +6,7 @@ App Home Assistant (HAOS) qui exécute, dans un conteneur unique :
 - un **tunnel VS Code** (`code tunnel`, authentification GitHub), utilisable depuis `vscode.dev` ou VS Code Desktop ;
 - un **espace de travail partagé** (`/share/opencode`) pour que l'extension OpenCode et le serveur voient les mêmes chemins.
 
-Conçu pour aarch64 (Raspberry Pi 4/5) ; le runtime détecte aussi x86_64, pour une image amd64 à venir. Le conteneur n'a ni accès à l'hôte, ni Docker, ni systemd.
+Conçu pour aarch64 (Raspberry Pi 4/5) et x86_64 : le runtime détecte l'architecture. Le conteneur n'a ni accès à l'hôte, ni Docker, ni systemd.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ Deux processus supervisés dans le conteneur :
 
 ## Prérequis
 
-- Home Assistant OS, architecture **aarch64**.
+- Home Assistant OS, architecture **aarch64** (Raspberry Pi 4/5) ou **amd64**.
 - Un compte **GitHub** (ou Microsoft) pour le tunnel VS Code.
 - Un accès Internet sortant en 443.
 - Optionnel : un domaine chez Cloudflare pour l'accès mobile, et une clé API d'un fournisseur de modèle.
@@ -150,7 +150,7 @@ Journal : onglet **Journal** de l'app. Les logs du service OpenCode y sont recop
 
 ## Limites connues
 
-- Architecture publiée : **aarch64** (amd64 prévu ; le runtime détecte l'architecture).
+- Architectures publiées : **aarch64** et **amd64**.
 - Un seul mot de passe partagé, sans MFA.
 - `code tunnel` est un service Microsoft : accepter les termes du serveur VS Code et utiliser un compte GitHub/Microsoft.
 - OpenCode est épinglé : une montée de version nécessite un rebuild.
