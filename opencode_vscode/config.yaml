@@ -5,8 +5,6 @@ description: Tunnel VS Code (auth GitHub) et serveur OpenCode sur Home Assistant
 arch:
   - aarch64
 init: false
-startup: application
-boot: auto
 map:
   - type: share
     read_only: false
