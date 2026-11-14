@@ -42,6 +42,7 @@ jobs:
         with:
           architectures: ${{ env.ARCHITECTURES }}
           image-name: ${{ env.IMAGE_NAME }}
+          registry-prefix: ghcr.io/edenglish92
 
   build:
     name: Build ${{ matrix.arch }} image
@@ -88,6 +89,7 @@ jobs:
           architectures: ${{ env.ARCHITECTURES }}
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
           image-name: ${{ env.IMAGE_NAME }}
+          registry-prefix: ghcr.io/edenglish92
           image-tags: |
             ${{ needs.init.outputs.version }}
             latest
