@@ -1,48 +1,85 @@
-# OpenCode VS Code Tunnel
+<div align="center">
 
-Home Assistant app (add-on) that runs, in a single container:
+# 🧠 OpenCode VS Code Tunnel
 
-- an **OpenCode server** (managed service, API and web UI), reachable locally and, optionally, through Cloudflare;
-- a **VS Code tunnel** (`code tunnel`, GitHub authentication), usable from `vscode.dev` or VS Code Desktop;
-- a **shared workspace** (`/share/opencode`) so that the OpenCode extension and the server see the same paths.
+**An OpenCode server _and_ a VS Code tunnel, side by side, on your Home Assistant box.**
 
-Built for Home Assistant OS on `aarch64` (Raspberry Pi 4/5). The container has no access to the host, to Docker, or to systemd.
+[![Home Assistant App](https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![Architecture](https://img.shields.io/badge/arch-aarch64-blue)](https://github.com/Edenglish92/ha-opencode)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Build](https://github.com/Edenglish92/ha-opencode/actions/workflows/build.yml/badge.svg)](https://github.com/Edenglish92/ha-opencode/actions/workflows/build.yml)
+[![Lint](https://github.com/Edenglish92/ha-opencode/actions/workflows/lint.yml/badge.svg)](https://github.com/Edenglish92/ha-opencode/actions/workflows/lint.yml)
 
-## Features
+</div>
 
-- Managed OpenCode service with a watchdog; service logs are mirrored to the app log.
-- VS Code tunnel started in the background and restarted automatically.
-- Password required for the OpenCode API (Basic auth, user `opencode`).
-- Optional remote MCP server (`ha-mcp`) configured from an app option.
-- `opencode-pair` helper: generates a pairing link and QR code without relying on the background service.
-- `/config` mounted read-write by default for direct Home Assistant configuration work (see Security).
+---
 
-## Requirements
+## ✨ What it does
 
-- Home Assistant OS, `aarch64` (an `amd64` build is planned).
-- A GitHub (or Microsoft) account for the VS Code tunnel.
-- Outbound HTTPS (443).
+| | |
+|---|---|
+| 🖥️ **VS Code, anywhere** | A `code tunnel` authenticated with your GitHub account: open the workspace from `vscode.dev` or VS Code Desktop. |
+| 🤖 **OpenCode server** | The OpenCode managed service runs on `4096`, with a watchdog and its logs mirrored into the app log. |
+| 🔗 **Shared workspace** | `/share/opencode` is visible from both sides, so the extension and the server see the same paths. |
+| 🔐 **Password protected** | The OpenCode API requires Basic auth (`opencode` + your password). The app refuses to start without it. |
+| 🧩 **Home Assistant MCP** | Point `ha_mcp_url` at your `ha-mcp` server and the assistant can drive Home Assistant. |
+| 📱 **Companion app ready** | Pair the OpenCode mobile app with `opencode-pair` (link + QR code). |
+| 🛠️ **Config access** | `/config` is mounted read-write by default, so the assistant can work on your YAML — with approval rules. |
 
-## Installation
+## 🚀 Quick start
 
-1. In Home Assistant: **Settings → Apps → App store → ⋮ → Repositories**.
-2. Add `https://github.com/Edenglish92/ha-opencode`.
-3. Install **OpenCode VS Code Tunnel**.
-4. Set `opencode_password` (required) and start the app.
-5. On first start, the log shows a `https://github.com/login/device` URL and a code. Enter the code with your GitHub account.
-6. Open `https://vscode.dev/tunnel/<tunnel_name>/share/opencode`.
+1. **Add this repository** in Home Assistant: *Settings → Apps → App store → ⋮ → Repositories*.
+2. **Install** `OpenCode VS Code Tunnel`.
+3. Set **`opencode_password`** — a long random value. The app will not start without it.
+4. **Start** the app and open the **Log** tab.
+5. On first start, the log shows a `https://github.com/login/device` link and a code: enter it with your GitHub account.
+6. Open **`https://vscode.dev/tunnel/<tunnel_name>/share/opencode`** and start coding.
 
-## Configuration
+> 💡 The VS Code tunnel is account-bound: keep MFA enabled on the GitHub account that owns it.
 
-See [opencode_vscode/DOCS.md](opencode_vscode/DOCS.md) for the full option reference, paths, pairing, MCP setup, maintenance and troubleshooting.
+## ⚙️ Configuration
 
-## Security
+| Option | Default | Description |
+|---|---|---|
+| `tunnel_name` | `opencode` | Name of the VS Code tunnel (`vscode.dev/tunnel/<name>`). |
+| `opencode_password` | — | **Required.** Basic auth password for the OpenCode API. |
+| `public_url` | — | Public URL used by `opencode-pair` to build pairing links. |
+| `ha_mcp_url` | — | Full URL of a remote `ha-mcp` server (contains a token, stored privately). |
+| `opencode_version` | `2.3.0` | OpenCode version to install, or `latest`. |
+| `accept_license` | `true` | Accept the VS Code Server license terms. |
 
-- The OpenCode API uses a **single shared password** (no MFA, no per-user accounts). Use a long random value.
-- If you expose the app through a tunnel, add **rate limiting** on the authentication paths.
-- The public hostname is discoverable through certificate transparency logs; treat it as public.
-- The container is isolated from the host, but `/config` is mounted read-write by default: every change must be approved. Set `read_only: true` on the `homeassistant_config` entry in `config.yaml` for a stricter setup.
+📖 Full reference, paths, pairing, MCP and troubleshooting: **[opencode_vscode/DOCS.md](opencode_vscode/DOCS.md)**.
 
-## License
+## 🔐 Security
 
-MIT. Third-party components: OpenCode (MIT); the VS Code CLI/server is downloaded at runtime and subject to Microsoft's license terms.
+- 🔑 One shared password, no per-user accounts: use a **long random value** and rotate it if needed.
+- 🚦 If you expose the app through a tunnel, add **rate limiting** on the authentication paths.
+- 🌍 A public hostname is discoverable through certificate transparency logs: treat it as public.
+- 📁 `/config` is mounted **read-write** by default. Every change must be approved; set `read_only: true` in `config.yaml` for a stricter setup.
+- 📦 The container has no access to the host, Docker or systemd.
+
+## 🧭 Architecture
+
+```
+Client (app / browser)  ──► Cloudflare / local      ──► OpenCode service :4096
+Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
+
+                 /share/opencode  (shared workspace)
+                 /config          (Home Assistant configuration)
+                 /data            (private app state: sessions, config, auth)
+```
+
+## 🛠️ Maintenance
+
+- **OpenCode**: change `opencode_version` and restart; the binary is downloaded only when the version changes.
+- **VS Code CLI**: compared with the current stable commit at every start, replaced automatically when it changes.
+- **App**: `Check for updates` → `Update` after a `config.yaml` change; `Rebuild` for code changes.
+- **Backups**: Home Assistant backups include the app's `/data` (sessions, configuration, tunnel auth).
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
+
+Third-party components: OpenCode (MIT). The VS Code CLI and server are downloaded at runtime and subject to Microsoft's license terms.
+
+<div align="center"><sub>Built for Home Assistant OS · Made to keep your editor and your assistant in one place.</sub></div>
