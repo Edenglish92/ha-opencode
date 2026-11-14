@@ -3,8 +3,10 @@ version: "0.7.0"
 slug: opencode_vscode
 description: Tunnel VS Code (auth GitHub) et serveur OpenCode sur Home Assistant
 url: https://github.com/Edenglish92/ha-opencode/tree/main/opencode_vscode
+image: ghcr.io/edenglish92/opencode-vscode-tunnel
 arch:
   - aarch64
+  - amd64
 init: false
 map:
   - type: share
