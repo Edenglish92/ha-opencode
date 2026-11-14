@@ -3,6 +3,9 @@ name: Build
 on:
   push:
     branches: [main]
+    paths:
+      - "opencode_vscode/**"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 env:
@@ -64,6 +67,7 @@ jobs:
             ${{ needs.init.outputs.version }}
             latest
           push: "true"
+          skip-existing: ${{ needs.init.outputs.version }}
           version: ${{ needs.init.outputs.version }}
           context: opencode_vscode
           build-args: |
@@ -87,3 +91,4 @@ jobs:
           image-tags: |
             ${{ needs.init.outputs.version }}
             latest
+          skip-existing: ${{ needs.init.outputs.version }}
