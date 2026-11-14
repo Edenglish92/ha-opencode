@@ -74,6 +74,7 @@ Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
 - **OpenCode**: change `opencode_version` and restart; the binary is downloaded only when the version changes.
 - **VS Code CLI**: compared with the current stable commit at every start, replaced automatically when it changes.
 - **App**: `Check for updates` → `Update` after a `config.yaml` change; `Rebuild` for code changes.
+- **Monthly refresh**: a scheduled workflow bumps the patch version on the 1st of each month, which rebuilds and publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
 - **Backups**: Home Assistant backups include the app's `/data` (sessions, configuration, tunnel auth).
 
 ## 📄 License
