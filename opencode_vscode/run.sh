@@ -2,11 +2,12 @@
 set -euo pipefail
 
 OPTIONS=/data/options.json
-TUNNEL_NAME="$(jq -r '.tunnel_name // "rpi-opencode"' "$OPTIONS")"
+TUNNEL_NAME="$(jq -r '.tunnel_name // "opencode"' "$OPTIONS")"
 ACCEPT="$(jq -r '.accept_license // false' "$OPTIONS")"
 PASSWORD="$(jq -r '.opencode_password // ""' "$OPTIONS")"
-PUBLIC_URL="$(jq -r '.public_url // "https://opencode.orcel.org"' "$OPTIONS")"
+PUBLIC_URL="$(jq -r '.public_url // ""' "$OPTIONS")"
 MCP_URL="$(jq -r '.ha_mcp_url // ""' "$OPTIONS")"
+OC_VERSION_OPT="$(jq -r '.opencode_version // "2.3.0"' "$OPTIONS")"
 
 if [ -z "$PASSWORD" ]; then
   echo "[erreur] Renseigne 'opencode_password' dans la configuration de l'app, puis redemarre."
@@ -19,29 +20,54 @@ export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 mkdir -p "$HOME" /share/opencode /data/bin
 
+# Architecture (binaires telecharges au premier demarrage)
+case "$(uname -m)" in
+  aarch64|arm64) ARCH=arm64 ;;
+  x86_64|amd64)  ARCH=x64 ;;
+  *) echo "[erreur] architecture non supportee : $(uname -m)"; exit 1 ;;
+esac
+
 # ---------------------------------------------------------------------------
-# CLI VS Code (non embarque dans l'image : telecharge au premier demarrage)
+# CLI VS Code (non embarque dans l'image ; rafraichi si le commit change)
 # ---------------------------------------------------------------------------
 CLI=/data/bin/code
-if [ ! -x "$CLI" ]; then
-  echo "[poc] telechargement du CLI VS Code (alpine-arm64)..."
-  curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64" -o /tmp/vscode-cli.tgz
+CLI_URL="https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-${ARCH}"
+REMOTE_COMMIT="$(curl -sIL -o /dev/null -w '%{url_effective}' "$CLI_URL" 2>/dev/null | sed -n 's|.*/stable/\([0-9a-f]\{40\}\).*|\1|p' || true)"
+LOCAL_COMMIT="$(cat /data/bin/code.commit 2>/dev/null || true)"
+
+if [ ! -x "$CLI" ] || { [ -n "$REMOTE_COMMIT" ] && [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; }; then
+  echo "[opencode] telechargement du CLI VS Code (${ARCH})..."
+  curl -fsSL "$CLI_URL" -o /tmp/vscode-cli.tgz
   tar -xzf /tmp/vscode-cli.tgz -C /data/bin
   chmod +x "$CLI"
   rm -f /tmp/vscode-cli.tgz
+  if [ -n "$REMOTE_COMMIT" ]; then
+    printf '%s\n' "$REMOTE_COMMIT" > /data/bin/code.commit
+  fi
 fi
 
 # ---------------------------------------------------------------------------
-# OpenCode (binaire linux-arm64, version epinglee)
+# OpenCode (binaire linux-${ARCH}, version configurable)
 # ---------------------------------------------------------------------------
 OC_BIN=/data/bin/opencode
-OC_VERSION=2.3.0
-if [ ! -x "$OC_BIN" ]; then
-  echo "[poc] telechargement d'OpenCode v${OC_VERSION} (linux-arm64)..."
-  curl -fsSL "https://github.com/anomalyco/opencode/releases/download/v${OC_VERSION}/opencode-linux-arm64.tar.gz" -o /tmp/opencode.tgz
+OC_VERSION="$OC_VERSION_OPT"
+if [ "$OC_VERSION" = "latest" ]; then
+  OC_VERSION="$(curl -fsSL https://api.github.com/repos/anomalyco/opencode/releases/latest \
+    | jq -r '.tag_name // empty' | sed 's/^v//' || true)"
+fi
+if [ -z "$OC_VERSION" ]; then
+  echo "[erreur] impossible de determiner la version d'OpenCode."
+  exit 1
+fi
+
+INSTALLED_VERSION="$(cat /data/bin/opencode.version 2>/dev/null || true)"
+if [ ! -x "$OC_BIN" ] || [ "$INSTALLED_VERSION" != "$OC_VERSION" ]; then
+  echo "[opencode] telechargement d'OpenCode v${OC_VERSION} (linux-${ARCH})..."
+  curl -fsSL "https://github.com/anomalyco/opencode/releases/download/v${OC_VERSION}/opencode-linux-${ARCH}.tar.gz" -o /tmp/opencode.tgz
   tar -xzf /tmp/opencode.tgz -C /data/bin
   chmod +x "$OC_BIN"
   rm -f /tmp/opencode.tgz
+  printf '%s\n' "$OC_VERSION" > /data/bin/opencode.version
 fi
 ln -sf "$OC_BIN" /usr/local/bin/opencode
 
@@ -74,7 +100,12 @@ chmod 700 /data/bin/opencode-client
 cat > /data/bin/opencode-pair <<'EOF'
 #!/bin/sh
 . /data/home/.opencode-client.env
-URL="${OPENCODE_PUBLIC_URL:-https://opencode.orcel.org}"
+URL="${OPENCODE_PUBLIC_URL:-}"
+URL="${URL%/}"
+if [ -z "$URL" ]; then
+  echo "[erreur] renseigne l'option 'public_url' (ex. https://opencode.example.com)" >&2
+  exit 1
+fi
 code=$(/data/bin/opencode api --server http://127.0.0.1:4096 post /api/pair | jq -r '.code // empty')
 if [ -z "$code" ]; then
   echo "[erreur] impossible de generer un code de pairing" >&2
@@ -109,7 +140,7 @@ if [ -n "$MCP_URL" ]; then
         "$CFG" > "$CFG.tmp"; then
       mv "$CFG.tmp" "$CFG"
       chmod 600 "$CFG"
-      echo "[poc] MCP ha-mcp configure"
+      echo "[opencode] MCP ha-mcp configure"
     else
       rm -f "$CFG.tmp"
       echo "[erreur] echec de la fusion MCP (jq)."
@@ -123,7 +154,7 @@ else
     if jq 'del(.mcp.servers["ha-mcp"])' "$CFG" > "$CFG.tmp"; then
       mv "$CFG.tmp" "$CFG"
       chmod 600 "$CFG"
-      echo "[poc] MCP ha-mcp retire (option vide)"
+      echo "[opencode] MCP ha-mcp retire (option vide)"
     else
       rm -f "$CFG.tmp"
     fi
@@ -151,7 +182,7 @@ fi
 # ---------------------------------------------------------------------------
 # Tunnel VS Code en tache de fond (relance automatique)
 # ---------------------------------------------------------------------------
-echo "[poc] demarrage du tunnel: $TUNNEL_NAME"
+echo "[opencode] demarrage du tunnel: $TUNNEL_NAME"
 (
   while true; do
     ARGS=(tunnel --name "$TUNNEL_NAME" --disable-telemetry)
@@ -168,20 +199,20 @@ echo "[poc] demarrage du tunnel: $TUNNEL_NAME"
 # ---------------------------------------------------------------------------
 cd /share/opencode
 
-echo "[poc] configuration du service OpenCode"
+echo "[opencode] configuration du service OpenCode"
 "$OC_BIN" service set hostname 0.0.0.0 || true
 "$OC_BIN" service set port 4096 || true
 "$OC_BIN" service set password "$PASSWORD" || true
 "$OC_BIN" service set remote false || true
 
-echo "[poc] demarrage du service OpenCode"
+echo "[opencode] demarrage du service OpenCode"
 "$OC_BIN" service start || true
 
 # Laisse au service le temps de demarrer avant de verifier
 sleep 3
 code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:4096/api/info || true)
 if [ -z "$code" ] || [ "$code" = "000" ]; then
-  echo "[poc] service manage indisponible : repli sur 'serve'"
+  echo "[opencode] service manage indisponible : repli sur 'serve'"
   exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
 fi
 
@@ -196,7 +227,7 @@ while true; do
   sleep 30
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:4096/api/info || true)
   if [ -z "$code" ] || [ "$code" = "000" ]; then
-    echo "[poc] serveur injoignable, redemarrage du service"
+    echo "[opencode] serveur injoignable, redemarrage du service"
     "$OC_BIN" service start || true
   fi
 done

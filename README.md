@@ -15,7 +15,7 @@ Built for Home Assistant OS on `aarch64` (Raspberry Pi 4/5). The container has n
 - Password required for the OpenCode API (Basic auth, user `opencode`).
 - Optional remote MCP server (`ha-mcp`) configured from an app option.
 - `opencode-pair` helper: generates a pairing link and QR code without relying on the background service.
-- Optional `/config` mount (read-write) for direct Home Assistant configuration work.
+- `/config` mounted read-write by default for direct Home Assistant configuration work (see Security).
 
 ## Requirements
 
@@ -41,7 +41,7 @@ See [opencode_vscode/DOCS.md](opencode_vscode/DOCS.md) for the full option refer
 - The OpenCode API uses a **single shared password** (no MFA, no per-user accounts). Use a long random value.
 - If you expose the app through a tunnel, add **rate limiting** on the authentication paths.
 - The public hostname is discoverable through certificate transparency logs; treat it as public.
-- The container is isolated from the host, but `/config` is mounted read-write when enabled: approval rules apply.
+- The container is isolated from the host, but `/config` is mounted read-write by default: every change must be approved. Set `read_only: true` on the `homeassistant_config` entry in `config.yaml` for a stricter setup.
 
 ## License
 

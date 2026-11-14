@@ -6,7 +6,7 @@ App Home Assistant (HAOS) qui exécute, dans un conteneur unique :
 - un **tunnel VS Code** (`code tunnel`, authentification GitHub), utilisable depuis `vscode.dev` ou VS Code Desktop ;
 - un **espace de travail partagé** (`/share/opencode`) pour que l'extension OpenCode et le serveur voient les mêmes chemins.
 
-Architecture aarch64 (Raspberry Pi 4/5). Le conteneur n'a ni accès à l'hôte, ni Docker, ni systemd.
+Conçu pour aarch64 (Raspberry Pi 4/5) ; le runtime détecte aussi x86_64, pour une image amd64 à venir. Le conteneur n'a ni accès à l'hôte, ni Docker, ni systemd.
 
 ## Architecture
 
@@ -47,6 +47,7 @@ Deux processus supervisés dans le conteneur :
 | `accept_license` | booléen | `true` | Accepte les termes de licence du serveur VS Code (`--accept-server-license-terms`). |
 | `opencode_password` | mot de passe | vide | **Obligatoire.** Mot de passe Basic auth de l'API OpenCode (utilisateur : `opencode`). Vide = l'app refuse de démarrer. |
 | `public_url` | texte | — | URL publique utilisée par `opencode-pair` pour construire les liens de pairing (ex. `https://opencode.example.com`). |
+| `opencode_version` | texte | `2.3.0` | Version d'OpenCode à installer. `latest` interroge l'API GitHub au démarrage. |
 | `ha_mcp_url` | mot de passe | vide | URL complète du serveur MCP `ha-mcp` distant (contient un jeton). Vide = la clé `ha-mcp` est retirée de la configuration OpenCode. |
 
 Le mot de passe et l'URL MCP ne sont jamais affichés dans les journaux.
@@ -119,15 +120,16 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 - L'API OpenCode est protégée par **Basic auth** (un seul compte, mot de passe partagé). Il n'y a pas de MFA ni de comptes séparés.
 - Le tunnel VS Code est lié au compte GitHub/Microsoft utilisé au pairing ; les ports forwardés restent privés.
 - L'exposition via Cloudflare doit être accompagnée d'un **rate limiting** sur les chemins d'authentification (période minimale 10 s sur le plan Free).
-- `opencode.orcel.org` (ou votre domaine) est public et visible dans les journaux de transparence des certificats.
-- L'agent tourne dans le conteneur : pas d'accès à l'hôte, à Docker ou à systemd. En revanche, `/config` est monté en écriture ; les règles d'approbation de `AGENTS.md` s'appliquent.
+- `https://<votre-domaine>` est public et visible dans les journaux de transparence des certificats.
+- L'agent tourne dans le conteneur : pas d'accès à l'hôte, à Docker ou à systemd.
+- `/config` est monté en **écriture** par défaut : l'agent peut modifier la configuration Home Assistant. Chaque modification doit être approuvée explicitement. Pour un usage plus prudent, mettre `read_only: true` sur l'entrée `homeassistant_config` dans `config.yaml`, puis reconstruire.
 - Ne jamais publier les options `opencode_password` / `ha_mcp_url`, ni l'URL MCP complète.
 
 ## Maintenance
 
-- **Mise à jour d'OpenCode** : la version est épinglée dans `run.sh` (`OC_VERSION=2.3.0`). Modifier la valeur, puis reconstruire l'app.
+- **Mise à jour d'OpenCode** : option `opencode_version` (`2.3.0` par défaut, ou `latest`). Un changement de valeur déclenche le téléchargement au prochain démarrage ; `Reconstruire` n'est pas nécessaire tant que le code ne change pas.
+- **CLI VS Code** : téléchargé dans `/data/bin` et comparé au commit stable à chaque démarrage ; il est remplacé si le commit change. Le serveur VS Code se met à jour seul.
 - **Mise à jour de l'app** : après une modification de `config.yaml`, `Vérifier les mises à jour` puis `Mettre à jour`. Pour un changement de code sans changement de version, `Reconstruire`.
-- **CLI VS Code** : téléchargé au premier démarrage dans `/data/bin` ; le serveur VS Code se met à jour seul.
 - **Sauvegardes** : les sauvegardes HA incluent les données de l'app (`/data`), donc sessions et configuration OpenCode.
 
 ## Dépannage
@@ -148,7 +150,7 @@ Journal : onglet **Journal** de l'app. Les logs du service OpenCode y sont recop
 
 ## Limites connues
 
-- Architecture **aarch64** uniquement.
+- Architecture publiée : **aarch64** (amd64 prévu ; le runtime détecte l'architecture).
 - Un seul mot de passe partagé, sans MFA.
 - `code tunnel` est un service Microsoft : accepter les termes du serveur VS Code et utiliser un compte GitHub/Microsoft.
 - OpenCode est épinglé : une montée de version nécessite un rebuild.

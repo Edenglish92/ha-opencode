@@ -1,7 +1,8 @@
 name: OpenCode VS Code Tunnel
-version: "0.6.1"
+version: "0.7.0"
 slug: opencode_vscode
 description: Tunnel VS Code (auth GitHub) et serveur OpenCode sur Home Assistant
+url: https://github.com/Edenglish92/ha-opencode/tree/main/opencode_vscode
 arch:
   - aarch64
 init: false
@@ -11,16 +12,17 @@ map:
   - type: homeassistant_config
     read_only: false
     path: /config
-  - type: local_apps
 options:
-  tunnel_name: rpi-opencode
+  tunnel_name: opencode
   accept_license: true
   opencode_password: ""
-  public_url: https://opencode.orcel.org
+  public_url: ""
   ha_mcp_url: ""
+  opencode_version: "2.3.0"
 schema:
   tunnel_name: str
   accept_license: bool
   opencode_password: password
   public_url: str
   ha_mcp_url: password
+  opencode_version: str
