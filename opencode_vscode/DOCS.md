@@ -10,8 +10,12 @@ Le dépôt publie **deux apps construites depuis la même image** :
 
 | App | `/config` | Usage |
 | --- | --- | --- |
-| **OpenCode VS Code Tunnel** | écriture | Accès complet, y compris `configuration.yaml`, ESPHome et composants custom. |
-| **OpenCode VS Code Tunnel (read-only)** | **lecture seule** | Tout passe par l'API et le MCP ; aucune édition de fichier. **Recommandé** par défaut. |
+| **OpenCode VS Code Tunnel** | écriture | Accès complet : toi (VS Code, terminal) **et** l'agent pouvez modifier les fichiers, y compris `configuration.yaml`, ESPHome et composants custom. **Recommandé**, avec les options de hardening. |
+| **OpenCode VS Code Tunnel (read-only)** | **lecture seule** | Aucune édition de fichier, ni par l'agent ni par toi. Tout passe par l'API et le MCP. |
+
+Le montage en lecture seule s'applique au **conteneur entier** : VS Code, son terminal et les scripts voient le même `/config` en ro. L'app read-only n'est donc pas « la même app avec des garde-fous pour l'IA » : elle empêche aussi l'édition manuelle depuis VS Code. Elle convient à la consultation et aux actions par l'API ; les fichiers se modifient alors depuis Samba, File Editor ou Studio Code Server.
+
+Conséquence pour un composant Home Assistant (futur `opencode_assist`, §2.11) : le copier dans `/config/custom_components` **depuis l'app** exige l'app en écriture. Avec l'app read-only, l'installation se fait par Samba ou File Editor ; une fois installé, le composant fonctionne avec les deux apps puisqu'il parle à l'app en HTTP.
 
 Conçu pour aarch64 (Raspberry Pi 4/5) et x86_64 : le runtime détecte l'architecture. Le conteneur n'a ni accès à l'hôte, ni Docker, ni systemd.
 
@@ -84,10 +88,12 @@ Quatre couches, de la plus souple à la plus dure :
 
 | HA-MCP | `/config` | Ce que l'agent peut faire |
 | --- | --- | --- |
-| complet | **lecture seule** | Tout via l'API et le MCP ; aucune édition de fichier. **Recommandé.** |
-| complet | écriture *(app par défaut)* | En plus : `configuration.yaml`, ESPHome, composants custom. |
+| complet | écriture *(app par défaut)* + hardening | Tout, y compris `configuration.yaml`, ESPHome, composants custom. **Recommandé.** |
+| complet | lecture seule | Tout via l'API et le MCP ; aucune édition de fichier. Plus sûr, mais VS Code ne peut plus éditer `/config` non plus. |
 | lecture seule | écriture | Uniquement les fichiers ; aucune écriture via le MCP. |
 | lecture seule | lecture seule | Lecture intégrale, aucun changement. |
+
+Le profil read-only est le plus strict, mais il change aussi **ton** usage : dans cette app, VS Code ne peut plus modifier la configuration Home Assistant. Si tu veux garder l'édition manuelle dans VS Code, reste sur l'app en écriture avec `hardening_deny_secrets`.
 
 ### Permissions gérées
 
@@ -184,7 +190,7 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 - L'exposition via Cloudflare doit être accompagnée d'un **rate limiting** sur les chemins d'authentification (période minimale 10 s sur le plan Free).
 - `https://<votre-domaine>` est public et visible dans les journaux de transparence des certificats.
 - L'agent tourne dans le conteneur : pas d'accès à l'hôte, à Docker ou à systemd.
-- L'app **read-only** monte `/config` en lecture seule : l'écriture y est impossible, quel que soit l'outil utilisé.
+- L'app **read-only** monte `/config` en lecture seule : l'écriture y est impossible, quel que soit l'outil, **y compris VS Code et son terminal**.
 - Ne jamais publier les options `opencode_password` / `ha_mcp_url`, ni l'URL MCP complète.
 
 ## Maintenance

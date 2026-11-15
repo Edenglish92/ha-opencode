@@ -24,7 +24,7 @@
 | 🔐 **Password protected** | The OpenCode API requires Basic auth (`opencode` + your password). The app refuses to start without it. |
 | 🧩 **Home Assistant MCP** | Point `ha_mcp_url` at your `ha-mcp` server and the assistant can drive Home Assistant. |
 | 📱 **Companion app ready** | Pair the OpenCode mobile app with `opencode-pair` (link + QR code). |
-| 🛠️ **Config access** | Two profiles from one image: `/config` read-write for full power, or **read-only** for a safe default. |
+| 🛠️ **Config access** | Two profiles from one image: `/config` read-write (recommended, with hardening) or **read-only** for API-only use. |
 
 ## 🚀 Quick start
 
@@ -39,14 +39,16 @@
 
 ## 🧩 Two profiles
 
-The repository ships **two apps built from the same image** — pick the one that matches how much power you want to give the assistant:
+The repository ships **two apps built from the same image** — same features, different `/config` access:
 
-| App | `/config` | What the assistant can do |
+| App | `/config` | What it means |
 |---|---|---|
-| **OpenCode VS Code Tunnel** | read-write | Everything, including `configuration.yaml`, ESPHome and custom components. |
-| **OpenCode VS Code Tunnel (read-only)** | **read-only** | Everything through the Home Assistant API and HA-MCP; no file edits. **Recommended.** |
+| **OpenCode VS Code Tunnel** | read-write | You (VS Code, terminal) **and** the assistant can edit Home Assistant files. **Recommended, together with the hardening options.** |
+| **OpenCode VS Code Tunnel (read-only)** | **read-only** | No file edits at all. Everything goes through the Home Assistant API and HA-MCP. |
 
-Both can be installed side by side: each has its own `/data` and a different default tunnel name (`opencode` and `opencode-ro`). The read-only app does not require a rebuild or a fork — it pulls the exact same image and version.
+The read-only mount applies to the **whole container**: VS Code, its terminal and every script see the same read-only `/config`. The read-only app is therefore not "the same app with guardrails for the AI" — it also prevents *you* from editing YAML from VS Code. Use it to consult and act through the API only, and edit files from outside (Samba, File Editor, Studio Code Server).
+
+Both can be installed side by side: each has its own `/data` (and therefore its own session history) and a different default tunnel name (`opencode` and `opencode-ro`). The read-only app does not require a rebuild or a fork — it pulls the exact same image and version.
 
 What changes **through HA-MCP** is configured in HA-MCP itself, not in this app: see [Security](#-security).
 
