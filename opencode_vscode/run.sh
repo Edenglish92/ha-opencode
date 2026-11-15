@@ -59,7 +59,7 @@ fi
 # ---------------------------------------------------------------------------
 if [ "$INSTALL_OC_EXT" = "true" ]; then
   EXT_DIR="$HOME/.vscode-server/extensions"
-  if ! ls "$EXT_DIR" 2>/dev/null | grep -q '^opencode-v2-maker\.opencode-v2-vscode-'; then
+  if ! compgen -G "$EXT_DIR/opencode-v2-maker.opencode-v2-vscode-*" >/dev/null; then
     echo "[opencode] installation de l'extension VS Code OpenCode V2..."
     if ! timeout 90 "$CLI" --install-extension opencode-v2-maker.opencode-v2-vscode --force >/dev/null 2>&1; then
       echo "[avertissement] extension OpenCode non installee (marketplace indisponible ?)"
