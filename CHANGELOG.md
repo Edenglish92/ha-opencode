@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1
+
+- `hardening_deny_secrets` also denies shell commands that mention
+  `secrets.yaml` or `.storage` (targeted and best-effort; `/data` stays
+  covered by the `edit` tool only, since the OpenCode binary lives there).
+- Docs: permissions are per tool; what the shell rules do and do not cover.
+- App icons (`icon.png`, `logo.png`).
+
 ## 0.8.0
 
 - Second app `opencode_vscode_ro`: same image and version, `/config` mounted

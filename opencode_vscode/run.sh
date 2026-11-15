@@ -189,6 +189,8 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
         --argjson ask_shell "$HARDEN_ASK_SHELL" '
           def managed_rules:
             [ {action:"shell", resource:"*"},
+              {action:"shell", resource:"*secrets.yaml*"},
+              {action:"shell", resource:"*/.storage*"},
               {action:"edit",  resource:"/config/*"},
               {action:"edit",  resource:"/config/secrets.yaml"},
               {action:"edit",  resource:"/config/.storage/*"},
@@ -205,7 +207,9 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                   {action:"edit", resource:"/config/secrets.yaml", effect:"deny"},
                   {action:"edit", resource:"/config/.storage/*", effect:"deny"},
                   {action:"edit", resource:"/data/*", effect:"deny"},
-                  {action:"read", resource:"/config/secrets.yaml", effect:"ask"}
+                  {action:"read", resource:"/config/secrets.yaml", effect:"ask"},
+                  {action:"shell", resource:"*secrets.yaml*", effect:"deny"},
+                  {action:"shell", resource:"*/.storage*", effect:"deny"}
                 ] else [] end)) as $rules
           | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)
           | (if $agent != "" then .default_agent = $agent else . end)
