@@ -1,11 +1,12 @@
 name: Build
 
+# Gate: the image is published only after Lint succeeded on the same commit.
+# A push no longer starts the build directly; it starts when Lint completes.
 on:
-  push:
+  workflow_run:
+    workflows: ["Lint"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "opencode_vscode/**"
-      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 env:
@@ -19,12 +20,15 @@ permissions:
 jobs:
   init:
     name: Initialize build
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Read add-on version
         id: version
@@ -57,6 +61,8 @@ jobs:
       matrix: ${{ fromJSON(needs.init.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Build image
         uses: home-assistant/builder/actions/build-image@2026.09.0
