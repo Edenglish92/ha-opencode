@@ -141,6 +141,7 @@ Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
 - **VS Code CLI**: compared with the current stable commit at every start, replaced automatically when it changes.
 - **App**: `Check for updates` → `Update` after a `config.yaml` change; `Rebuild` for code changes.
 - **Monthly refresh**: a scheduled workflow bumps the patch version of **both apps** on the 1st of each month, which rebuilds and publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
+- **Changelog**: `CHANGELOG.md` is mirrored into each app folder, because the Home Assistant update dialog reads it there. CI fails if the copies diverge.
 - **Backups**: Home Assistant backups include the app's `/data` (sessions, configuration, tunnel auth).
 
 ## 📄 License

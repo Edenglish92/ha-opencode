@@ -75,6 +75,26 @@ jobs:
             exit 1
           fi
 
+  changelog:
+    name: Changelog copies match
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare changelog copies
+        run: |
+          status=0
+          for file in opencode_vscode/CHANGELOG.md opencode_vscode_ro/CHANGELOG.md; do
+            if ! diff -q CHANGELOG.md "$file"; then
+              echo "::error::$file differs from the root CHANGELOG.md"
+              status=1
+            fi
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "Copy CHANGELOG.md into both app folders (the Supervisor reads it there)."
+            exit 1
+          fi
+          echo "All changelog copies are identical."
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
