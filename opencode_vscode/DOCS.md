@@ -64,7 +64,7 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | `opencode_version` | texte | `2.3.0` | Version d'OpenCode à installer. `latest` interroge l'API GitHub au démarrage. |
 | `default_agent` | texte | `plan` | Agent par défaut écrit dans `opencode.json`. Vide = clé inchangée. |
 | `default_model` | texte | vide | Modèle par défaut, au format `fournisseur/modèle` (ex. `opencode-go/deepseek-v4.1-flash`). Vide = clé inchangée. |
-| `hardening_deny_secrets` | booléen | `true` | Interdit l'écriture sur `/config/secrets.yaml`, `/config/.storage/*` et `/data/*` ; demande confirmation avant de lire `secrets.yaml`. |
+| `hardening_deny_secrets` | booléen | `true` | Interdit à l'**outil d'édition** d'écrire dans `/config/secrets.yaml`, `/config/.storage/*` et `/data/*` ; demande confirmation avant de lire `secrets.yaml`. |
 | `hardening_ask_config_edit` | booléen | `false` | Demande confirmation avant toute édition sous `/config`. |
 | `hardening_ask_shell` | booléen | `false` | Demande confirmation avant toute commande shell. |
 | `seed_agents_md` | booléen | `true` | Crée `/share/opencode/AGENTS.md` au premier démarrage **s'il est absent** ; ne l'écrase jamais. |
@@ -109,6 +109,8 @@ Quand une option `hardening_*` est active, l'app écrit les règles correspondan
 ```
 
 Ces règles appartiennent à l'app : les supprimer ou les modifier à la main n'a pas d'effet durable, elles réapparaissent au redémarrage. Pour les changer, utiliser les options de l'app. Les règles portant sur d'autres actions ou chemins sont conservées.
+
+Les permissions filtrent **par outil** : un `deny` sur `edit` ne couvre pas une écriture par shell (`echo > fichier`, `sed -i`, `tee`, `cp`), pas plus qu'une édition faite par toi dans VS Code. Pour couvrir le canal shell, activer `hardening_ask_shell` ; pour une barrière absolue, utiliser l'app read-only.
 
 ### Côté HA-MCP
 

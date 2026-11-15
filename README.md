@@ -63,7 +63,7 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 | `opencode_version` | `2.3.0` | OpenCode version to install, or `latest`. |
 | `default_agent` | `plan` | Default agent written to `opencode.json`. Empty leaves the key unchanged. |
 | `default_model` | — | Default model id, e.g. `opencode-go/deepseek-v4.1-flash`. Empty leaves the key unchanged. |
-| `hardening_deny_secrets` | `true` | Deny edits to `secrets.yaml`, `.storage` and `/data`; ask before reading `secrets.yaml`. |
+| `hardening_deny_secrets` | `true` | Deny **file edits** (the `edit` tool) to `secrets.yaml`, `.storage` and `/data`; ask before reading `secrets.yaml`. |
 | `hardening_ask_config_edit` | `false` | Ask for approval before any edit under `/config`. |
 | `hardening_ask_shell` | `false` | Ask for approval before shell commands. |
 | `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
@@ -100,6 +100,8 @@ When a `hardening_*` option is enabled, the app writes the matching rules into `
 ```
 
 These rules belong to the app: editing or removing them by hand has no lasting effect — they are rewritten on the next start. Change the app options instead. Rules that target other actions or paths are preserved.
+
+Permissions are **per tool**: a `deny` on `edit` does not cover a shell write (`echo > file`, `sed -i`, `tee`, `cp`), nor an edit you make yourself in VS Code. Enable `hardening_ask_shell` to cover the shell channel; use the read-only app for a hard filesystem boundary.
 
 ### Home Assistant side (HA-MCP)
 
