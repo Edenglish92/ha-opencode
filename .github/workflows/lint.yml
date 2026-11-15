@@ -18,6 +18,10 @@ jobs:
       - uses: frenck/action-addon-linter@v2
         with:
           path: "./opencode_vscode"
+      - name: Lint read-only add-on
+        uses: frenck/action-addon-linter@v2
+        with:
+          path: "./opencode_vscode_ro"
 
   shellcheck:
     name: ShellCheck
@@ -46,6 +50,30 @@ jobs:
         with:
           file_or_dir: opencode_vscode
           config_file: .yamllint
+      - name: Lint read-only add-on YAML
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: opencode_vscode_ro
+          config_file: .yamllint
+
+  versions:
+    name: Add-on versions match
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare versions
+        run: |
+          rw="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' opencode_vscode/config.yaml | head -n1)"
+          ro="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' opencode_vscode_ro/config.yaml | head -n1)"
+          echo "opencode_vscode=${rw:-<empty>} opencode_vscode_ro=${ro:-<empty>}"
+          if [ -z "$rw" ] || [ -z "$ro" ]; then
+            echo "::error::Could not read one of the versions"
+            exit 1
+          fi
+          if [ "$rw" != "$ro" ]; then
+            echo "::error::Versions differ ($rw vs $ro); both apps share one image"
+            exit 1
+          fi
 
   gitleaks:
     name: gitleaks

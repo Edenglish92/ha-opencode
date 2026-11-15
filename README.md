@@ -24,18 +24,31 @@
 | 🔐 **Password protected** | The OpenCode API requires Basic auth (`opencode` + your password). The app refuses to start without it. |
 | 🧩 **Home Assistant MCP** | Point `ha_mcp_url` at your `ha-mcp` server and the assistant can drive Home Assistant. |
 | 📱 **Companion app ready** | Pair the OpenCode mobile app with `opencode-pair` (link + QR code). |
-| 🛠️ **Config access** | `/config` is mounted read-write by default, so the assistant can work on your YAML — with approval rules. |
+| 🛠️ **Config access** | Two profiles from one image: `/config` read-write for full power, or **read-only** for a safe default. |
 
 ## 🚀 Quick start
 
 1. **Add this repository** in Home Assistant: *Settings → Apps → App store → ⋮ → Repositories*.
-2. **Install** `OpenCode VS Code Tunnel`.
+2. **Install** `OpenCode VS Code Tunnel` (read-write) or `OpenCode VS Code Tunnel (read-only)` — see [Two profiles](#-two-profiles).
 3. Set **`opencode_password`** — a long random value. The app will not start without it.
 4. **Start** the app and open the **Log** tab.
 5. On first start, the log shows a `https://github.com/login/device` link and a code: enter it with your GitHub account.
 6. Open **`https://vscode.dev/tunnel/<tunnel_name>/share/opencode`** and start coding.
 
 > 💡 The VS Code tunnel is account-bound: keep MFA enabled on the GitHub account that owns it.
+
+## 🧩 Two profiles
+
+The repository ships **two apps built from the same image** — pick the one that matches how much power you want to give the assistant:
+
+| App | `/config` | What the assistant can do |
+|---|---|---|
+| **OpenCode VS Code Tunnel** | read-write | Everything, including `configuration.yaml`, ESPHome and custom components. |
+| **OpenCode VS Code Tunnel (read-only)** | **read-only** | Everything through the Home Assistant API and HA-MCP; no file edits. **Recommended.** |
+
+Both can be installed side by side: each has its own `/data` and a different default tunnel name (`opencode` and `opencode-ro`). The read-only app does not require a rebuild or a fork — it pulls the exact same image and version.
+
+What changes **through HA-MCP** is configured in HA-MCP itself, not in this app: see [Security](#-security).
 
 ## ⚙️ Configuration
 
@@ -46,17 +59,61 @@
 | `public_url` | — | Public URL used by `opencode-pair` to build pairing links. |
 | `ha_mcp_url` | — | Full URL of a remote `ha-mcp` server (contains a token, stored privately). |
 | `opencode_version` | `2.3.0` | OpenCode version to install, or `latest`. |
+| `default_agent` | `plan` | Default agent written to `opencode.json`. Empty leaves the key unchanged. |
+| `default_model` | — | Default model id, e.g. `opencode-go/deepseek-v4.1-flash`. Empty leaves the key unchanged. |
+| `hardening_deny_secrets` | `true` | Deny edits to `secrets.yaml`, `.storage` and `/data`; ask before reading `secrets.yaml`. |
+| `hardening_ask_config_edit` | `false` | Ask for approval before any edit under `/config`. |
+| `hardening_ask_shell` | `false` | Ask for approval before shell commands. |
+| `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
 | `accept_license` | `true` | Accept the VS Code Server license terms. |
 
 📖 Full reference, paths, pairing, MCP and troubleshooting: **[opencode_vscode/DOCS.md](opencode_vscode/DOCS.md)**.
 
 ## 🔐 Security
 
+This app is a powerful tool: it can edit your Home Assistant configuration and, through HA-MCP, change Home Assistant objects. Choose the level of power you need.
+
+### Four layers
+
+| Layer | What it does | Enforced by |
+|---|---|---|
+| `AGENTS.md` and skills | ask for approval, forbid some actions | ❌ the prompt only (advisory) |
+| OpenCode **permissions** (`opencode.json`) | `deny` / `ask` before a tool runs | ✅ the OpenCode runtime |
+| **HA-MCP** policies | read-only mode, per-tool approvals, `/readonly` endpoint | ✅ the HA-MCP server |
+| `/config` **mount** | writes fail at the filesystem level | ✅ the kernel |
+
+`AGENTS.md` is **not a security boundary**: a model mistake or a prompt injection can bypass it. Only permissions, HA-MCP policies and the read-only mount are enforced by the runtime.
+
+### Managed permissions
+
+When a `hardening_*` option is enabled, the app writes the matching rules into `/data/home/.config/opencode/opencode.json` **at every start**:
+
+```jsonc
+"permissions": [
+  { "action": "edit", "resource": "/config/secrets.yaml", "effect": "deny" },
+  { "action": "edit", "resource": "/config/.storage/*", "effect": "deny" },
+  { "action": "edit", "resource": "/data/*", "effect": "deny" },
+  { "action": "read", "resource": "/config/secrets.yaml", "effect": "ask" }
+]
+```
+
+These rules belong to the app: editing or removing them by hand has no lasting effect — they are rewritten on the next start. Change the app options instead. Rules that target other actions or paths are preserved.
+
+### Home Assistant side (HA-MCP)
+
+What the assistant may change **through HA-MCP** is configured in **HA-MCP**, not in this app:
+
+- enable **Read Only Mode**;
+- define per-tool approval policies (`ha_manage_security_policy`);
+- or point `ha_mcp_url` at the `/readonly` endpoint of your server.
+
+### Other precautions
+
 - 🔑 One shared password, no per-user accounts: use a **long random value** and rotate it if needed.
 - 🚦 If you expose the app through a tunnel, add **rate limiting** on the authentication paths.
 - 🌍 A public hostname is discoverable through certificate transparency logs: treat it as public.
-- 📁 `/config` is mounted **read-write** by default. Every change must be approved; set `read_only: true` in `config.yaml` for a stricter setup.
 - 📦 The container has no access to the host, Docker or systemd.
+- 🙈 Never share `opencode_password` or `ha_mcp_url`: the MCP URL contains a token.
 
 ## 🧭 Architecture
 
@@ -74,7 +131,7 @@ Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
 - **OpenCode**: change `opencode_version` and restart; the binary is downloaded only when the version changes.
 - **VS Code CLI**: compared with the current stable commit at every start, replaced automatically when it changes.
 - **App**: `Check for updates` → `Update` after a `config.yaml` change; `Rebuild` for code changes.
-- **Monthly refresh**: a scheduled workflow bumps the patch version on the 1st of each month, which rebuilds and publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
+- **Monthly refresh**: a scheduled workflow bumps the patch version of **both apps** on the 1st of each month, which rebuilds and publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
 - **Backups**: Home Assistant backups include the app's `/data` (sessions, configuration, tunnel auth).
 
 ## 📄 License

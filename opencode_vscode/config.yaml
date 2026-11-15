@@ -1,5 +1,5 @@
 name: OpenCode VS Code Tunnel
-version: "0.7.0"
+version: "0.8.0"
 slug: opencode_vscode
 description: Tunnel VS Code (auth GitHub) et serveur OpenCode sur Home Assistant
 url: https://github.com/Edenglish92/ha-opencode/tree/main/opencode_vscode
@@ -21,6 +21,12 @@ options:
   public_url: ""
   ha_mcp_url: ""
   opencode_version: "2.3.0"
+  default_agent: plan
+  default_model: ""
+  hardening_deny_secrets: true
+  hardening_ask_config_edit: false
+  hardening_ask_shell: false
+  seed_agents_md: true
 schema:
   tunnel_name: str
   accept_license: bool
@@ -28,3 +34,9 @@ schema:
   public_url: str
   ha_mcp_url: password
   opencode_version: str
+  default_agent: str
+  default_model: str
+  hardening_deny_secrets: bool
+  hardening_ask_config_edit: bool
+  hardening_ask_shell: bool
+  seed_agents_md: bool

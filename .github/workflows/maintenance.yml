@@ -21,25 +21,36 @@ jobs:
       - name: Bump patch version
         id: bump
         run: |
-          file="opencode_vscode/config.yaml"
-          current="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' "$file" | head -n1)"
+          primary="opencode_vscode/config.yaml"
+          secondary="opencode_vscode_ro/config.yaml"
+
+          current="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' "$primary" | head -n1)"
+          other="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' "$secondary" | head -n1)"
           if [ -z "$current" ]; then
-            echo "::error::Could not read version from $file"
+            echo "::error::Could not read version from $primary"
             exit 1
           fi
+          if [ "$current" != "$other" ]; then
+            echo "::error::Version mismatch: $primary=$current, $secondary=$other"
+            exit 1
+          fi
+
           major="${current%%.*}"
           rest="${current#*.}"
           minor="${rest%%.*}"
           patch="${rest#*.}"
           next="${major}.${minor}.$((patch + 1))"
-          sed -i "s/^version:[[:space:]]*\"${current}\"$/version: \"${next}\"/" "$file"
+
+          for file in "$primary" "$secondary"; do
+            sed -i "s/^version:[[:space:]]*\"${current}\"$/version: \"${next}\"/" "$file"
+          done
           echo "next=${next}" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add opencode_vscode/config.yaml
+          git add opencode_vscode/config.yaml opencode_vscode_ro/config.yaml
           if git diff --cached --quiet; then
             echo "No version change, nothing to do."
             exit 0

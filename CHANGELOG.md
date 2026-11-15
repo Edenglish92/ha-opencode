@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0
+
+- Second app `opencode_vscode_ro`: same image and version, `/config` mounted
+  read-only. Both apps can be installed side by side.
+- New options: `default_agent`, `default_model`, `hardening_deny_secrets`,
+  `hardening_ask_config_edit`, `hardening_ask_shell`, `seed_agents_md`.
+- `run.sh`: managed OpenCode permission rules rewritten at every start
+  (rules targeting other actions or paths are preserved), optional `AGENTS.md`
+  seeding when the file is missing, default agent/model merged without
+  overwriting other keys.
+- Docs: four-layer hardening model, profiles table, managed permissions,
+  HA-MCP pointer, explicit note that `AGENTS.md` is advisory.
+- CI: lint both apps and check that versions match; the monthly refresh bumps
+  both `config.yaml` files.
+
 ## 0.6.1
 
 - README, LICENSE (MIT) and CI workflows.

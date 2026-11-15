@@ -8,6 +8,13 @@ PASSWORD="$(jq -r '.opencode_password // ""' "$OPTIONS")"
 PUBLIC_URL="$(jq -r '.public_url // ""' "$OPTIONS")"
 MCP_URL="$(jq -r '.ha_mcp_url // ""' "$OPTIONS")"
 OC_VERSION_OPT="$(jq -r '.opencode_version // "2.3.0"' "$OPTIONS")"
+DEFAULT_AGENT_OPT="$(jq -r '.default_agent // ""' "$OPTIONS")"
+DEFAULT_MODEL_OPT="$(jq -r '.default_model // ""' "$OPTIONS")"
+# jq '//' traite false comme absent : comparer explicitement pour garder le defaut vrai
+HARDEN_DENY_SECRETS="$(jq -r 'if .hardening_deny_secrets == false then "false" else "true" end' "$OPTIONS")"
+HARDEN_ASK_CONFIG="$(jq -r 'if .hardening_ask_config_edit == true then "true" else "false" end' "$OPTIONS")"
+HARDEN_ASK_SHELL="$(jq -r 'if .hardening_ask_shell == true then "true" else "false" end' "$OPTIONS")"
+SEED_AGENTS_MD="$(jq -r 'if .seed_agents_md == false then "false" else "true" end' "$OPTIONS")"
 
 if [ -z "$PASSWORD" ]; then
   echo "[erreur] Renseigne 'opencode_password' dans la configuration de l'app, puis redemarre."
@@ -159,6 +166,86 @@ else
       rm -f "$CFG.tmp"
     fi
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# Configuration OpenCode : agent et modele par defaut, permissions gerees
+# Les regles gerees sont reecrites a chaque demarrage (l'option fait foi) ;
+# les regles portant sur d'autres actions ou chemins sont conservees.
+# ---------------------------------------------------------------------------
+if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
+   || [ "$HARDEN_DENY_SECRETS" = "true" ] \
+   || [ "$HARDEN_ASK_CONFIG" = "true" ] \
+   || [ "$HARDEN_ASK_SHELL" = "true" ]; then
+  if [ ! -f "$CFG" ]; then
+    echo '{}' > "$CFG"
+  fi
+  if jq -e . "$CFG" >/dev/null 2>&1; then
+    if jq \
+        --arg agent "$DEFAULT_AGENT_OPT" \
+        --arg model "$DEFAULT_MODEL_OPT" \
+        --argjson deny_secrets "$HARDEN_DENY_SECRETS" \
+        --argjson ask_config "$HARDEN_ASK_CONFIG" \
+        --argjson ask_shell "$HARDEN_ASK_SHELL" '
+          def managed_rules:
+            [ {action:"shell", resource:"*"},
+              {action:"edit",  resource:"/config/*"},
+              {action:"edit",  resource:"/config/secrets.yaml"},
+              {action:"edit",  resource:"/config/.storage/*"},
+              {action:"edit",  resource:"/data/*"},
+              {action:"read",  resource:"/config/secrets.yaml"} ];
+          def is_managed($r):
+            any(managed_rules[]; .action == $r.action and .resource == $r.resource);
+
+          . as $cfg
+          | ([ ($cfg.permissions // [])[] | select(is_managed(.) | not) ]
+             + (if $ask_shell then [{action:"shell", resource:"*", effect:"ask"}] else [] end)
+             + (if $ask_config then [{action:"edit", resource:"/config/*", effect:"ask"}] else [] end)
+             + (if $deny_secrets then [
+                  {action:"edit", resource:"/config/secrets.yaml", effect:"deny"},
+                  {action:"edit", resource:"/config/.storage/*", effect:"deny"},
+                  {action:"edit", resource:"/data/*", effect:"deny"},
+                  {action:"read", resource:"/config/secrets.yaml", effect:"ask"}
+                ] else [] end)) as $rules
+          | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)
+          | (if $agent != "" then .default_agent = $agent else . end)
+          | (if $model != "" then .model = $model else . end)
+        ' "$CFG" > "$CFG.tmp"; then
+      mv "$CFG.tmp" "$CFG"
+      chmod 600 "$CFG"
+      echo "[opencode] agent/modele et permissions mis a jour"
+    else
+      rm -f "$CFG.tmp"
+      echo "[erreur] echec de la fusion agent/permissions (jq)."
+    fi
+  else
+    echo "[erreur] $CFG n'est pas un JSON valide : agent/permissions non configurees."
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# AGENTS.md : modele seme uniquement s'il est absent (jamais ecrase)
+# ---------------------------------------------------------------------------
+if [ "$SEED_AGENTS_MD" = "true" ] && [ ! -f /share/opencode/AGENTS.md ]; then
+  cat > /share/opencode/AGENTS.md <<'EOF'
+# Regles du projet
+
+- Lecture seule par defaut : demander avant toute modification.
+- Ne jamais afficher, copier ou committer un secret, un jeton ou un mot de passe.
+- Ne jamais editer `secrets.yaml` ni `.storage` a la main.
+- Pour Home Assistant : charger `home-assistant-workflow` si present, puis
+  `home-assistant-best-practices` (MCP) avant toute ecriture.
+- Avant une modification : cible, changement, effet attendu, retour arriere ;
+  attendre l'accord explicite.
+- Apres une modification : verifier par une lecture ou un controle de sante.
+- `/share/opencode` = espace de travail, `/config` = configuration Home Assistant,
+  `/data` = etat prive de l'app.
+
+Ce fichier est consultatif : les permissions OpenCode et le montage de `/config`
+restent les seules barrieres appliquees par le runtime.
+EOF
+  chmod 644 /share/opencode/AGENTS.md
+  echo "[opencode] AGENTS.md cree (modele par defaut)"
 fi
 
 # ---------------------------------------------------------------------------
