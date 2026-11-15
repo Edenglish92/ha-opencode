@@ -23,6 +23,7 @@
 | 🔗 **Shared workspace** | `/share/opencode` is visible from both sides, so the extension and the server see the same paths. |
 | 🔐 **Password protected** | The OpenCode API requires Basic auth (`opencode` + your password). The app refuses to start without it. |
 | 🧩 **Home Assistant MCP** | Point `ha_mcp_url` at your `ha-mcp` server and the assistant can drive Home Assistant. |
+| 🔌 **Extension included** | The OpenCode V2 extension is installed into the VS Code server on first start (disable with `install_opencode_extension`). |
 | 📱 **Companion app ready** | Pair the OpenCode mobile app with `opencode-pair` (link + QR code). |
 | 🛠️ **Config access** | Two profiles from one image: `/config` read-write (recommended, with hardening) or **read-only** for API-only use. |
 
@@ -67,6 +68,7 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 | `hardening_ask_config_edit` | `false` | Ask for approval before any edit under `/config`. |
 | `hardening_ask_shell` | `false` | Ask for approval before shell commands. |
 | `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
+| `install_opencode_extension` | `true` | Install the OpenCode V2 VS Code extension into the server on first start if missing. |
 | `accept_license` | `true` | Accept the VS Code Server license terms. |
 
 📖 Full reference, paths, pairing, MCP and troubleshooting: **[opencode_vscode/DOCS.md](opencode_vscode/DOCS.md)**.
@@ -116,6 +118,7 @@ What the assistant may change **through HA-MCP** is configured in **HA-MCP**, no
 ### Other precautions
 
 - 🔑 One shared password, no per-user accounts: use a **long random value** and rotate it if needed.
+- 🙈 The API password is never written to the logs: the service configuration is written directly (`service.json`, mode `600`), and any historical occurrence in the service log is redacted at start.
 - 🚦 If you expose the app through a tunnel, add **rate limiting** on the authentication paths.
 - 🌍 A public hostname is discoverable through certificate transparency logs: treat it as public.
 - 📦 The container has no access to the host, Docker or systemd.

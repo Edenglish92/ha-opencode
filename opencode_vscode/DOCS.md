@@ -68,6 +68,7 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | `hardening_ask_config_edit` | booléen | `false` | Demande confirmation avant toute édition sous `/config`. |
 | `hardening_ask_shell` | booléen | `false` | Demande confirmation avant toute commande shell. |
 | `seed_agents_md` | booléen | `true` | Crée `/share/opencode/AGENTS.md` au premier démarrage **s'il est absent** ; ne l'écrase jamais. |
+| `install_opencode_extension` | booléen | `true` | Installe l'extension VS Code **OpenCode V2** dans le serveur au premier démarrage si elle manque. |
 
 Le mot de passe et l'URL MCP ne sont jamais affichés dans les journaux.
 
@@ -155,6 +156,12 @@ Réglages machine écrits au premier démarrage (s'ils n'existent pas) :
 }
 ```
 
+L'extension **OpenCode V2** est installée automatiquement au démarrage si elle manque (`install_opencode_extension`). Pour la poser à la main dans un tunnel existant :
+
+```bash
+/data/bin/code --install-extension opencode-v2-maker.opencode-v2-vscode --force
+```
+
 ### Terminal et CLI
 
 ```bash
@@ -190,6 +197,7 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 ## Sécurité
 
 - L'API OpenCode est protégée par **Basic auth** (un seul compte, mot de passe partagé). Il n'y a pas de MFA ni de comptes séparés.
+- Le mot de passe n'est **jamais écrit dans les journaux** : la configuration du service est écrite directement (`service.json`, mode `600`) et les éventuelles occurrences historiques dans le log du service sont expurgées au démarrage.
 - Le tunnel VS Code est lié au compte GitHub/Microsoft utilisé au pairing ; les ports forwardés restent privés.
 - L'exposition via Cloudflare doit être accompagnée d'un **rate limiting** sur les chemins d'authentification (période minimale 10 s sur le plan Free).
 - `https://<votre-domaine>` est public et visible dans les journaux de transparence des certificats.
@@ -210,6 +218,7 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 | Symptôme | Cause / action |
 | --- | --- |
 | L'app ne démarre pas | `opencode_password` vide : renseigner l'option. |
+| Extension OpenCode absente dans VS Code | `install_opencode_extension` désactivé, ou marketplace injoignable au démarrage : lancer `/data/bin/code --install-extension opencode-v2-maker.opencode-v2-vscode --force`. |
 | `opencode mcp list` : « No MCP servers configured » | `ha_mcp_url` vide, ou service non redémarré après la modification de l'option. |
 | MCP absent dans l'app | Résolution par répertoire : vérifier le dossier de la session. |
 | Une édition est refusée sans demande | Règle `deny` de `hardening_deny_secrets` : c'est le comportement attendu pour `secrets.yaml`, `.storage` et `/data`. |

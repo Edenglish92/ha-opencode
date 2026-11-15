@@ -7,7 +7,7 @@ Variante de **OpenCode VS Code Tunnel** construite depuis la **même image** et 
 | `/share/opencode` | écriture | écriture |
 | `/config` | écriture | **lecture seule** |
 | Tunnel par défaut | `opencode` | `opencode-ro` |
-| Options | 12 | identiques |
+| Options | 13 | identiques |
 
 ## Ce que ça change
 

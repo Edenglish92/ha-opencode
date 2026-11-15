@@ -15,6 +15,7 @@ HARDEN_DENY_SECRETS="$(jq -r 'if .hardening_deny_secrets == false then "false" e
 HARDEN_ASK_CONFIG="$(jq -r 'if .hardening_ask_config_edit == true then "true" else "false" end' "$OPTIONS")"
 HARDEN_ASK_SHELL="$(jq -r 'if .hardening_ask_shell == true then "true" else "false" end' "$OPTIONS")"
 SEED_AGENTS_MD="$(jq -r 'if .seed_agents_md == false then "false" else "true" end' "$OPTIONS")"
+INSTALL_OC_EXT="$(jq -r 'if .install_opencode_extension == false then "false" else "true" end' "$OPTIONS")"
 
 if [ -z "$PASSWORD" ]; then
   echo "[erreur] Renseigne 'opencode_password' dans la configuration de l'app, puis redemarre."
@@ -50,6 +51,19 @@ if [ ! -x "$CLI" ] || { [ -n "$REMOTE_COMMIT" ] && [ "$REMOTE_COMMIT" != "$LOCAL
   rm -f /tmp/vscode-cli.tgz
   if [ -n "$REMOTE_COMMIT" ]; then
     printf '%s\n' "$REMOTE_COMMIT" > /data/bin/code.commit
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Extension VS Code OpenCode V2 (installee si absente, jamais imposee)
+# ---------------------------------------------------------------------------
+if [ "$INSTALL_OC_EXT" = "true" ]; then
+  EXT_DIR="$HOME/.vscode-server/extensions"
+  if ! ls "$EXT_DIR" 2>/dev/null | grep -q '^opencode-v2-maker\.opencode-v2-vscode-'; then
+    echo "[opencode] installation de l'extension VS Code OpenCode V2..."
+    if ! timeout 90 "$CLI" --install-extension opencode-v2-maker.opencode-v2-vscode --force >/dev/null 2>&1; then
+      echo "[avertissement] extension OpenCode non installee (marketplace indisponible ?)"
+    fi
   fi
 fi
 
@@ -291,10 +305,31 @@ echo "[opencode] demarrage du tunnel: $TUNNEL_NAME"
 cd /share/opencode
 
 echo "[opencode] configuration du service OpenCode"
-"$OC_BIN" service set hostname 0.0.0.0 || true
-"$OC_BIN" service set port 4096 || true
-"$OC_BIN" service set password "$PASSWORD" || true
-"$OC_BIN" service set remote false || true
+# service.json est écrit directement : passer le mot de passe en argument au
+# CLI le ferait journaliser en clair dans opencode.log.
+SVC="$HOME/.config/opencode/service.json"
+mkdir -p "$(dirname "$SVC")"
+if [ -f "$SVC" ] && jq -e . "$SVC" >/dev/null 2>&1; then
+  SVC_BASE="$(cat "$SVC")"
+else
+  SVC_BASE='{}'
+fi
+if printf '%s' "$SVC_BASE" | jq --arg p "$PASSWORD" \
+     '.hostname = "0.0.0.0" | .port = 4096 | .password = $p' > "$SVC.tmp"; then
+  mv "$SVC.tmp" "$SVC"
+  chmod 600 "$SVC"
+else
+  rm -f "$SVC.tmp"
+  echo "[erreur] impossible d'écrire $SVC : mot de passe non configuré."
+  exit 1
+fi
+
+# Nettoyage des anciennes lignes qui contenaient le mot de passe en clair
+LOG="$HOME/.local/share/opencode/log/opencode.log"
+mkdir -p "$(dirname "$LOG")"
+if [ -f "$LOG" ]; then
+  sed -i -E 's/args="\[\\"service\\",\\"set\\",\\"password\\",\\".*\\"\]"/args="[redacted]"/g' "$LOG" || true
+fi
 
 echo "[opencode] demarrage du service OpenCode"
 "$OC_BIN" service start || true

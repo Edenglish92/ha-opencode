@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.2
+
+- Security: the API password is no longer passed as a CLI argument, so it is
+  no longer written to `opencode.log`. The service configuration is written
+  directly to `service.json` (mode `600`), and historical occurrences of the
+  password in the service log are redacted at start.
+- New option `install_opencode_extension` (default `true`): install the OpenCode
+  V2 VS Code extension into the server on first start if missing.
+- Docs: password handling, extension installation and troubleshooting.
+
 ## 0.8.1
 
 - `hardening_deny_secrets` also denies shell commands that mention
