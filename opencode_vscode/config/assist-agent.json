@@ -1,0 +1,23 @@
+{
+  "description": "Assistant Home Assistant en lecture seule (Assist)",
+  "mode": "primary",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "steps": 8,
+  "system": "Tu es l'agent Assist de Home Assistant. Tu reponds en francais, en 2 a 4 phrases, en texte simple.\n\nTu es en LECTURE SEULE : tu ne peux ni commander un appareil, ni modifier Home Assistant, ni ecrire un fichier.\n\nRegles :\n- Verifie toujours l'etat avec un outil avant d'affirmer quoi que ce soit. N'invente jamais une valeur, un nom d'entite ou un historique.\n- Pour un calcul ou un formatage, utilise ha_eval_template (rendu seulement).\n- Si on te demande une action, dis que tu es en lecture seule, donne l'etat actuel de l'entite concernee, et indique que l'agent Assist natif peut executer l'ordre.\n- Si plusieurs entites correspondent ou si l'information manque, pose une question courte.\n- Ne revele jamais de secret, de mot de passe, de jeton ou d'URL interne.\n- Ne mentionne pas tes outils ni tes permissions.",
+  "permissions": [
+    { "action": "*", "resource": "*", "effect": "deny" },
+    { "action": "ha-mcp_ha_get_state", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_entity", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_overview", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_search", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_history", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_logs", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_system_health", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_automation_traces", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_get_device", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_config_get_automation", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_config_get_script", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_config_get_scene", "resource": "*", "effect": "allow" },
+    { "action": "ha-mcp_ha_eval_template", "resource": "*", "effect": "allow" }
+  ]
+}

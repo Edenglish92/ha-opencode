@@ -391,7 +391,9 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"read",  resource:"/share/opencode/opencode.json"},
             {action:"edit",  resource:"/share/opencode/opencode.json"},
             {action:"read",  resource:"/share/opencode/opencode.jsonc"},
-            {action:"edit",  resource:"/share/opencode/opencode.jsonc"} ];
+            {action:"edit",  resource:"/share/opencode/opencode.jsonc"},
+            {action:"read",  resource:"/share/opencode/.opencode/*"},
+            {action:"edit",  resource:"/share/opencode/.opencode/*"} ];
         def is_managed($r):
           any(managed_rules[]; .action == $r.action and .resource == $r.resource);
 
@@ -431,6 +433,9 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"tool.use", resource:"read:/share/opencode/opencode.jsonc"},
             {action:"tool.use", resource:"edit:/share/opencode/opencode.jsonc"},
             {action:"tool.use", resource:"shell:*/share/opencode/opencode.json*"},
+            {action:"tool.use", resource:"read:/share/opencode/.opencode/*"},
+            {action:"tool.use", resource:"edit:/share/opencode/.opencode/*"},
+            {action:"tool.use", resource:"shell:*/share/opencode/.opencode/*"},
             {action:"tool.use", resource:"grep:*"} ];
         def is_managed_policy($p):
           any(managed_policies[]; .action == $p.action and .resource == $p.resource);
@@ -475,7 +480,10 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                 {action:"edit", resource:"/share/opencode/opencode.json", effect:"deny"},
                 {action:"read", resource:"/share/opencode/opencode.jsonc", effect:"deny"},
                 {action:"edit", resource:"/share/opencode/opencode.jsonc", effect:"deny"},
-                {action:"shell", resource:"*/share/opencode/opencode.json*", effect:"deny"}
+                {action:"shell", resource:"*/share/opencode/opencode.json*", effect:"deny"},
+                {action:"read", resource:"/share/opencode/.opencode/*", effect:"deny"},
+                {action:"edit", resource:"/share/opencode/.opencode/*", effect:"deny"},
+                {action:"shell", resource:"*/share/opencode/.opencode/*", effect:"deny"}
               ] else [] end)
            + extra_perms($extra_paths)) as $rules
         | ([ items($cfg.policies)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.8
+
+- Security: `/share/opencode/.opencode/` is refused in read and write, in
+  `permissions` and in the non-overridable `policies`. That directory holds the
+  project's skills — instructions injected into the agent's own context at the
+  next start — so writing there was a way to modify its instruction surface. The
+  runtime still loads them: the deny only covers the tools.
+- Docs: the reason, and what it costs (the agent can no longer author a skill in
+  the workspace; you still can).
+
 ## 0.8.7
 
 - Security: the workspace project configuration (`/share/opencode/opencode.json`

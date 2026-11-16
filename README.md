@@ -108,7 +108,7 @@ When a `hardening_*` option is enabled, the app writes the matching rules into `
 
 Policies are evaluated after the permission rules, after agent rules and after saved approvals, and they can only deny — never grant. That is what makes them hold when a project-level `opencode.json` (which the assistant is able to write in `/share/opencode`) tries to widen the rules.
 
-The workspace `opencode.json` and `opencode.jsonc` are themselves **refused in read and write**. A project configuration is not just a set of rules: its variables support `{file:…}` substitution, which the loader resolves outside every tool permission and can inject into an agent's system prompt. Denying the file removes the assistant's ability to author that input. A configuration you write yourself is of course still loaded.
+The workspace `opencode.json`, `opencode.jsonc` and the `.opencode/` directory are themselves **refused in read and write**. A project configuration is not just a set of rules: its variables support `{file:…}` substitution, which the loader resolves outside every tool permission and can inject into an agent's system prompt; and `.opencode/` holds the project's skills, whose text is injected into the agent's own context. Denying them removes the assistant's ability to author that input. A configuration or skill you write yourself is of course still loaded — the deny covers the tools, not the runtime.
 
 `grep` is denied under `hardening_deny_secrets` because its permission resource is the search **pattern**, not the path: a path-based rule is never consulted, so the tool could quietly pull secret values into the model context. Use the shell (`rg`) when you need a search; `hardening_ask_shell` is the real control there.
 
