@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.1
+
+- Fix: the workspace rules (`opencode.json`, `opencode.jsonc`, `.opencode/`) are
+  now also emitted in **relative** form. A session opened in `/share/opencode`
+  matches an internal file against its location-relative path, so the absolute
+  rules introduced in 0.8.7/0.8.8 never applied: the agent could still read and
+  rewrite its own instructions. Measured on a fresh session, which read
+  `.opencode/skills/.../SKILL.md` without being stopped.
+- The shell patterns follow (`*opencode.json*`, `*.opencode/*`), since shell
+  matching works on the raw command text.
+- Both forms are kept, so the rule also holds for a session opened outside the
+  workspace: relative matches internal paths, absolute matches external ones.
+
 ## 0.9.0
 
 - New **`assist` agent**, provisioned by `run.sh` from `config/assist-agent.json`

@@ -407,7 +407,18 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"read",  resource:"/share/opencode/.opencode/*"},
             {action:"edit",  resource:"/share/opencode/.opencode/*"},
             {action:"shell", resource:"*/share/opencode/opencode.json*"},
-            {action:"shell", resource:"*/share/opencode/.opencode/*"} ];
+            {action:"shell", resource:"*/share/opencode/.opencode/*"},
+            # Forme relative : pour une session ouverte DANS /share/opencode, la
+            # ressource de fichier interne est relative a la Location. Sans ces
+            # regles, les denies en absolu ci-dessus ne s appliquent pas (0.9.1).
+            {action:"read",  resource:"opencode.json"},
+            {action:"edit",  resource:"opencode.json"},
+            {action:"read",  resource:"opencode.jsonc"},
+            {action:"edit",  resource:"opencode.jsonc"},
+            {action:"read",  resource:".opencode/*"},
+            {action:"edit",  resource:".opencode/*"},
+            {action:"shell", resource:"*opencode.json*"},
+            {action:"shell", resource:"*.opencode/*"} ];
         def is_managed($r):
           any(managed_rules[]; .action == $r.action and .resource == $r.resource);
 
@@ -450,6 +461,14 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"tool.use", resource:"read:/share/opencode/.opencode/*"},
             {action:"tool.use", resource:"edit:/share/opencode/.opencode/*"},
             {action:"tool.use", resource:"shell:*/share/opencode/.opencode/*"},
+            {action:"tool.use", resource:"read:opencode.json"},
+            {action:"tool.use", resource:"edit:opencode.json"},
+            {action:"tool.use", resource:"read:opencode.jsonc"},
+            {action:"tool.use", resource:"edit:opencode.jsonc"},
+            {action:"tool.use", resource:"read:.opencode/*"},
+            {action:"tool.use", resource:"edit:.opencode/*"},
+            {action:"tool.use", resource:"shell:*opencode.json*"},
+            {action:"tool.use", resource:"shell:*.opencode/*"},
             {action:"tool.use", resource:"grep:*"} ];
         def is_managed_policy($p):
           any(managed_policies[]; .action == $p.action and .resource == $p.resource);
@@ -497,7 +516,15 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                 {action:"shell", resource:"*/share/opencode/opencode.json*", effect:"deny"},
                 {action:"read", resource:"/share/opencode/.opencode/*", effect:"deny"},
                 {action:"edit", resource:"/share/opencode/.opencode/*", effect:"deny"},
-                {action:"shell", resource:"*/share/opencode/.opencode/*", effect:"deny"}
+                {action:"shell", resource:"*/share/opencode/.opencode/*", effect:"deny"},
+                {action:"read", resource:"opencode.json", effect:"deny"},
+                {action:"edit", resource:"opencode.json", effect:"deny"},
+                {action:"read", resource:"opencode.jsonc", effect:"deny"},
+                {action:"edit", resource:"opencode.jsonc", effect:"deny"},
+                {action:"read", resource:".opencode/*", effect:"deny"},
+                {action:"edit", resource:".opencode/*", effect:"deny"},
+                {action:"shell", resource:"*opencode.json*", effect:"deny"},
+                {action:"shell", resource:"*.opencode/*", effect:"deny"}
               ] else [] end)
            + extra_perms($extra_paths)) as $rules
         | ([ items($cfg.policies)
