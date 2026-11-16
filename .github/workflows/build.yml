@@ -156,6 +156,45 @@ jobs:
             latest
           skip-existing: ${{ needs.init.outputs.version }}
 
+  # A version published without a tag leaves the repository's Releases page
+  # showing an old version. The release is created here, after verify, so it
+  # can only exist for an image that was actually published for both arches.
+  release:
+    name: Publish GitHub release
+    needs: [gate, init, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Create the release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.init.outputs.version }}
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists; nothing to do."
+            exit 0
+          fi
+
+          awk -v v="$VERSION" '$0 == "## " v {found=1; next} found && /^## / {exit} found' \
+            CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "Version ${VERSION}: image published for amd64 and aarch64." > notes.md
+            echo "No CHANGELOG section was found for this version." >> notes.md
+          fi
+
+          gh release create "v${VERSION}" \
+            --target "$SHA" \
+            --title "v${VERSION}" \
+            --notes-file notes.md
+
   # A version bump without a published tag makes the Supervisor offer an update
   # it cannot pull. Fail loudly instead of trusting the previous jobs.
   verify:
