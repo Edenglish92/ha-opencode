@@ -71,6 +71,7 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 | `hardening_deny_paths` | `[]` | Absolute paths refused in read and write, for secrets that live outside `secrets.yaml` (e.g. `/config/zigbee2mqtt/configuration.yaml`, `/config/esphome/secrets.yaml`). Applied through non-overridable policies; removing a path cleans its rules up at the next start. |
 | `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
 | `install_opencode_extension` | `true` | Install the OpenCode V2 VS Code extension into the server on first start if missing. |
+| `assist_agent_enabled` | `true` | Provision the read-only `assist` agent (Home Assistant, 13 read-only MCP tools) in `opencode.json`. |
 | `accept_license` | `true` | Accept the VS Code Server license terms. |
 
 📖 Full reference, paths, pairing, MCP and troubleshooting: **[opencode_vscode/DOCS.md](opencode_vscode/DOCS.md)**.

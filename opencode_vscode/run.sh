@@ -16,6 +16,7 @@ HARDEN_ASK_CONFIG="$(jq -r 'if .hardening_ask_config_edit == true then "true" el
 HARDEN_ASK_SHELL="$(jq -r 'if .hardening_ask_shell == true then "true" else "false" end' "$OPTIONS")"
 SEED_AGENTS_MD="$(jq -r 'if .seed_agents_md == false then "false" else "true" end' "$OPTIONS")"
 INSTALL_OC_EXT="$(jq -r 'if .install_opencode_extension == false then "false" else "true" end' "$OPTIONS")"
+ASSIST_AGENT="$(jq -r 'if .assist_agent_enabled == false then "false" else "true" end' "$OPTIONS")"
 # Chemins sensibles propres a l'installation (fichiers de secrets d'autres
 # add-ons, par exemple) : refuses en lecture et en ecriture. Seuls les chemins
 # absolus sont acceptes ; les autres sont signales et ignores.
@@ -365,7 +366,9 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
    || [ "$HARDEN_ASK_CONFIG" = "true" ] \
    || [ "$HARDEN_ASK_SHELL" = "true" ] \
    || [ "$EXTRA_COUNT" -gt 0 ] \
-   || [ "$PREV_COUNT" -gt 0 ]; then
+   || [ "$PREV_COUNT" -gt 0 ] \
+   || [ "$ASSIST_AGENT" = "true" ] \
+   || { [ -f "$CFG" ] && jq -e '.agents.assist' "$CFG" >/dev/null 2>&1; }; then
   if jq \
       --arg agent "$DEFAULT_AGENT_OPT" \
       --arg model "$DEFAULT_MODEL_OPT" \
@@ -373,7 +376,9 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
       --argjson ask_config "$HARDEN_ASK_CONFIG" \
       --argjson ask_shell "$HARDEN_ASK_SHELL" \
       --argjson extra_paths "$EXTRA_DENY_PATHS" \
-      --argjson previous_paths "$EXTRA_DENY_PREVIOUS" '
+      --argjson previous_paths "$EXTRA_DENY_PREVIOUS" \
+      --argjson assist "$ASSIST_AGENT" \
+      --slurpfile assistfile /etc/assist-agent.json '
         def items($v): ($v // []) | if type == "array" then .[] else empty end;
         def managed_rules:
           [ {action:"shell", resource:"*"},
@@ -503,6 +508,10 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
         | (if ($pol | length) > 0 then .policies = $pol else del(.policies) end)
         | (if $agent != "" then .default_agent = $agent else . end)
         | (if $model != "" then .model = $model else . end)
+        | (if $assist and ($assistfile | length) > 0 then
+             .agents.assist = ($assistfile[0] | if $model != "" then .model = $model else . end)
+           else del(.agents.assist) end)
+        | (if (.agents // {}) == {} then del(.agents) else . end)
       ' "$CFG" > "$CFG.tmp"; then
       mv "$CFG.tmp" "$CFG"
       chmod 600 "$CFG"

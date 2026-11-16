@@ -72,6 +72,7 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | `hardening_deny_paths` | liste | `[]` | Chemins absolus refusés en lecture et en écriture, pour les secrets hors `secrets.yaml` (ex. `/config/zigbee2mqtt/configuration.yaml`, `/config/esphome/secrets.yaml`). Appliqué via des policies non surchargeables ; retirer un chemin supprime ses règles au démarrage suivant. |
 | `seed_agents_md` | booléen | `true` | Crée `/share/opencode/AGENTS.md` au premier démarrage **s'il est absent** ; ne l'écrase jamais. |
 | `install_opencode_extension` | booléen | `true` | Installe l'extension VS Code **OpenCode V2** dans le serveur au premier démarrage si elle manque. |
+| `assist_agent_enabled` | booléen | `true` | Provisionne l'agent **`assist`** (lecture seule, 13 outils MCP en lecture) dans `opencode.json`. |
 
 Le mot de passe et l'URL MCP ne sont jamais affichés dans les journaux.
 
@@ -249,6 +250,18 @@ Renseigner `ha_mcp_url` avec l'URL complète du serveur MCP (elle contient un je
 Si l'option est vidée, la clé `ha-mcp` est retirée de la configuration.
 
 Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre que ceux du dossier courant. Un premier appel peut renvoyer une liste vide, puis se remplir.
+
+## Agent Assist
+
+L'app provisionne un agent OpenCode dédié, **`assist`**, dans `/data/home/.config/opencode/opencode.json` (clé `agents.assist`) :
+
+- **lecture seule** : `deny` global, puis 13 outils `ha-mcp` en lecture (états, historique, diagnostics, lectures de configuration, `ha_eval_template`) ;
+- modèle = `default_model` de l'app s'il est renseigné, sinon celui du fichier d'agent ;
+- prompt français, réponses courtes, aucune action : sur une demande de commande, il rappelle l'état courant et renvoie vers l'agent Assist natif.
+
+Ce provisionnement ne crée **pas** l'intégration de conversation Home Assistant : l'agent est disponible dans OpenCode (sélecteur d'agent, `opencode run --agent assist`). L'intégration `opencode_assist` (entité `conversation.opencode` dans Assist) est livrée séparément.
+
+L'app **possède** la clé `agents.assist` : elle est réécrite à chaque démarrage et supprimée si `assist_agent_enabled` est à `false`. Les autres agents définis par l'utilisateur sont conservés.
 
 ## Sécurité
 

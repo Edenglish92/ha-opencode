@@ -75,6 +75,9 @@ jobs:
             exit 1
           fi
 
+      - name: Validate assist agent JSON
+        run: jq -e . opencode_vscode/config/assist-agent.json >/dev/null
+
   changelog:
     name: Changelog copies match
     runs-on: ubuntu-latest

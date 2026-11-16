@@ -1,5 +1,5 @@
 name: OpenCode VS Code Tunnel (read-only)
-version: "0.8.10"
+version: "0.9.0"
 slug: opencode_vscode_ro
 description: Tunnel VS Code et serveur OpenCode, configuration Home Assistant en lecture seule
 url: https://github.com/Edenglish92/ha-opencode/tree/main/opencode_vscode_ro
@@ -29,6 +29,7 @@ options:
   hardening_deny_paths: []
   seed_agents_md: true
   install_opencode_extension: true
+  assist_agent_enabled: true
 schema:
   tunnel_name: str
   accept_license: bool
@@ -45,3 +46,4 @@ schema:
     - str
   seed_agents_md: bool
   install_opencode_extension: bool
+  assist_agent_enabled: bool

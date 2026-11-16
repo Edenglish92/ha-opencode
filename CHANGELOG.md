@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0
+
+- New **`assist` agent**, provisioned by `run.sh` from `config/assist-agent.json`
+  (copied into the image): a read-only Home Assistant assistant with a global
+  `deny`, an allowlist of 13 read-only `ha-mcp` tools, and a short French prompt.
+  It can be selected in OpenCode and driven with `opencode run --agent assist`.
+- New option `assist_agent_enabled` (default `true`). The app owns the
+  `agents.assist` key: rewritten at every start, removed when disabled; other
+  agents are preserved.
+- The agent model follows `default_model` when it is set.
+- CI validates `config/assist-agent.json`.
+- Docs: the agent, its scope, and the fact that the Home Assistant conversation
+  integration is delivered separately.
+
 ## 0.8.10
 
 - New `/app.version` written at build time from the Home Assistant builder's

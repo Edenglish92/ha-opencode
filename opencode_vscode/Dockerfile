@@ -22,6 +22,7 @@ RUN apt-get update \
         tar \
     && rm -rf /var/lib/apt/lists/*
 
+COPY config/assist-agent.json /etc/assist-agent.json
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
