@@ -2,25 +2,80 @@ name: Build
 
 # Gate: the image is published only after Lint succeeded on the same commit.
 # A push no longer starts the build directly; it starts when Lint completes.
+# A manual dispatch is still possible, but it must name a commit that already
+# has a successful Lint run: the gate below checks it through the API.
 on:
   workflow_run:
     workflows: ["Lint"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to publish (empty = head of main). Must already have a successful Lint run."
+        required: false
+        default: ""
 
 env:
   ARCHITECTURES: '["amd64", "aarch64"]'
   IMAGE_NAME: opencode-vscode-tunnel
   ADDON_PATH: opencode_vscode
+  REGISTRY_USER: edenglish92
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  gate:
+    name: Require a green Lint run
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Resolve and verify the commit
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          INPUT_SHA: ${{ inputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "workflow_run" ]; then
+            if [ "$RUN_CONCLUSION" != "success" ]; then
+              echo "::error::Lint concluded '$RUN_CONCLUSION'; refusing to publish."
+              exit 1
+            fi
+            sha="$RUN_SHA"
+          else
+            sha="${INPUT_SHA}"
+            if [ -z "$sha" ]; then
+              sha="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+            fi
+          fi
+
+          if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::'$sha' is not a full 40-character commit SHA."
+            exit 1
+          fi
+
+          green="$(gh api "repos/$REPO/actions/workflows/lint.yml/runs?head_sha=$sha&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          if [ -z "$green" ] || [ "$green" -eq 0 ]; then
+            echo "::error::No successful Lint run for $sha; refusing to publish an unverified image."
+            exit 1
+          fi
+
+          echo "Publishing $sha (successful Lint runs: $green)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
   init:
     name: Initialize build
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    needs: gate
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -28,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ needs.gate.outputs.sha }}
 
       - name: Read add-on version
         id: version
@@ -50,7 +105,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.arch }} image
-    needs: init
+    needs: [gate, init]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -62,7 +117,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ needs.gate.outputs.sha }}
 
       - name: Build image
         uses: home-assistant/builder/actions/build-image@2026.09.0
@@ -100,3 +155,55 @@ jobs:
             ${{ needs.init.outputs.version }}
             latest
           skip-existing: ${{ needs.init.outputs.version }}
+
+  # A version bump without a published tag makes the Supervisor offer an update
+  # it cannot pull. Fail loudly instead of trusting the previous jobs.
+  verify:
+    name: Verify published image
+    needs: [init, manifest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Both tags expose amd64 and arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.init.outputs.version }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          repo="${REGISTRY_USER}/${IMAGE_NAME}"
+          if ! token="$(curl -fsS -u "${ACTOR}:${GH_TOKEN}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo}:pull" | jq -r '.token // empty')"; then
+            echo "::error::Cannot authenticate against the registry for ${repo}"
+            exit 1
+          fi
+          if [ -z "$token" ]; then
+            echo "::error::The registry returned an empty token for ${repo}"
+            exit 1
+          fi
+
+          status=0
+          for tag in "$VERSION" latest; do
+            ref="https://ghcr.io/v2/${repo}/manifests/${tag}"
+            if ! json="$(curl -fsS -H "Authorization: Bearer ${token}" \
+                 -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json" \
+                 "$ref")"; then
+              echo "::error::Cannot read the manifest of ${repo}:${tag}"
+              status=1
+              continue
+            fi
+            arches="$(printf '%s' "$json" | jq -r '[.manifests[]?.platform.architecture] | sort | join(" ")')"
+            echo "${repo}:${tag} -> ${arches:-<single-arch>}"
+            for want in amd64 arm64; do
+              case " $arches " in
+                *" $want "*) ;;
+                *)
+                  echo "::error::${repo}:${tag} is missing the ${want} image"
+                  status=1
+                  ;;
+              esac
+            done
+          done
+          exit "$status"

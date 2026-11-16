@@ -58,13 +58,13 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 | Option | Default | Description |
 |---|---|---|
 | `tunnel_name` | `opencode` | Name of the VS Code tunnel (`vscode.dev/tunnel/<name>`). |
-| `opencode_password` | — | **Required.** Basic auth password for the OpenCode API. |
+| `opencode_password` | — | **Required.** Basic auth password for the OpenCode API, at least 16 characters. |
 | `public_url` | — | Public URL used by `opencode-pair` to build pairing links. |
 | `ha_mcp_url` | — | Full URL of a remote `ha-mcp` server (contains a token, stored privately). |
 | `opencode_version` | `2.3.0` | OpenCode version to install, or `latest`. |
 | `default_agent` | `plan` | Default agent written to `opencode.json`. Empty leaves the key unchanged. |
 | `default_model` | — | Default model id, e.g. `opencode-go/deepseek-v4.1-flash`. Empty leaves the key unchanged. |
-| `hardening_deny_secrets` | `true` | Deny **file edits** (the `edit` tool) to `secrets.yaml`, `.storage` and `/data`; ask before reading `secrets.yaml`; deny shell commands that mention `secrets.yaml` or `.storage`. |
+| `hardening_deny_secrets` | `true` | Deny reading and editing `secrets.yaml`, `.storage` and `/data`; deny shell commands that mention those paths or the app's credential files (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`). |
 | `hardening_ask_config_edit` | `false` | Ask for approval before any edit under `/config`. |
 | `hardening_ask_shell` | `false` | Ask for approval before shell commands. |
 | `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
@@ -97,15 +97,28 @@ When a `hardening_*` option is enabled, the app writes the matching rules into `
   { "action": "edit", "resource": "/config/secrets.yaml", "effect": "deny" },
   { "action": "edit", "resource": "/config/.storage/*", "effect": "deny" },
   { "action": "edit", "resource": "/data/*", "effect": "deny" },
-  { "action": "read", "resource": "/config/secrets.yaml", "effect": "ask" },
+  { "action": "read", "resource": "/config/secrets.yaml", "effect": "deny" },
+  { "action": "read", "resource": "/config/.storage/*", "effect": "deny" },
+  { "action": "read", "resource": "/data/*", "effect": "deny" },
+  { "action": "read", "resource": "/data/home/.opencode/plan/*", "effect": "allow" },
   { "action": "shell", "resource": "*secrets.yaml*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.storage*", "effect": "deny" }
+  { "action": "shell", "resource": "*/.storage*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.config/opencode/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.local/share/opencode/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.vscode/cli/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.copilot/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.git-credentials*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.opencode-client.env*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.bash_history*", "effect": "deny" },
+  { "action": "shell", "resource": "*/data/options.json*", "effect": "deny" }
 ]
 ```
 
+The single `allow` rule is deliberate: it sits after the `/data` deny because the last matching rule wins, and the Plan agent stores its plan file under `~/.opencode/plan`. Rules are ordered, so an `allow` placed before a `deny` would have no effect.
+
 These rules belong to the app: editing or removing them by hand has no lasting effect — they are rewritten on the next start. Change the app options instead. Rules that target other actions or paths are preserved.
 
-Permissions are **per tool**. The two `shell` rules above catch the obvious forms (`cat`, `sed -i`, `echo >`, `cp`, `grep`, including after a `cd /config/.storage`) and leave every other command alone. They remain **best-effort**: a constructed path (`F=…; cat $F`) or a wrapper tool can slip through, and an edit you make yourself in VS Code is not covered. Enable `hardening_ask_shell` for broader control; use the read-only app for a hard filesystem boundary.
+Permissions are **per tool**. The `shell` rules catch the obvious forms (`cat`, `sed -i`, `echo >`, `cp`, `grep`, including after a `cd /config/.storage`, and `$HOME`-relative paths, which still contain the matched suffix) and leave every other command alone. They remain **best-effort**: a constructed path (`F=…; cat $F`) or a wrapper tool can slip through, and an edit you make yourself in VS Code is not covered. Enable `hardening_ask_shell` for broader control; use the read-only app for a hard filesystem boundary.
 
 ### Home Assistant side (HA-MCP)
 
@@ -117,8 +130,9 @@ What the assistant may change **through HA-MCP** is configured in **HA-MCP**, no
 
 ### Other precautions
 
-- 🔑 One shared password, no per-user accounts: use a **long random value** and rotate it if needed.
+- 🔑 One shared password, no per-user accounts: at least 16 characters, long and random — the app refuses to start with a shorter one. Rotate it if needed.
 - 🙈 The API password is never written to the logs: the service configuration is written directly (`service.json`, mode `600`), and any historical occurrence in the service log is redacted at start.
+- 🔗 **Pair the tunnel immediately.** Until the GitHub account is confirmed, `code tunnel` prints a device code (`https://github.com/login/device`) in the app log. Anyone who can read that log and reach GitHub before you can claim the tunnel name — and a claimed tunnel is a shell in this container. Complete the pairing right after the first start, and re-check the tunnel list on your account (`code tunnel list`) if you ever suspect a takeover.
 - 🚦 If you expose the app through a tunnel, add **rate limiting** on the authentication paths.
 - 🌍 A public hostname is discoverable through certificate transparency logs: treat it as public.
 - 📦 The container has no access to the host, Docker or systemd.
@@ -140,7 +154,9 @@ Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
 - **OpenCode**: change `opencode_version` and restart; the binary is downloaded only when the version changes.
 - **VS Code CLI**: compared with the current stable commit at every start, replaced automatically when it changes.
 - **App**: `Check for updates` → `Update` after a `config.yaml` change; `Rebuild` for code changes.
-- **Monthly refresh**: a scheduled workflow bumps the patch version of **both apps** on the 1st of each month, which rebuilds and publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
+- **Monthly refresh**: a scheduled workflow bumps the patch version of **both apps** on the 1st of each month, then publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
+
+  The chain is explicit, because a commit pushed with `GITHUB_TOKEN` does **not** trigger workflows: the refresh job dispatches Lint on the new commit, Lint must pass, and only then does Build publish the image for `amd64` and `aarch64`. A manual Build run is accepted only for a commit that already has a successful Lint run, and a final job fails if the version tag is missing from the registry. To re-run after a failure: `gh workflow run lint.yml --ref main` (or re-run the failed Build job from the Actions tab).
 - **Changelog**: `CHANGELOG.md` is mirrored into each app folder, because the Home Assistant update dialog reads it there. CI fails if the copies diverge.
 - **Backups**: Home Assistant backups include the app's `/data` (sessions, configuration, tunnel auth).
 
