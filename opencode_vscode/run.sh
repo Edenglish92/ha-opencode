@@ -44,6 +44,13 @@ export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 mkdir -p "$HOME" /share/opencode /data/bin
 
+# Marqueur de version : distingue l'image reellement installee du depot, et
+# evite d'affirmer « je suis en X » en lisant config.yaml alors que l'app tourne
+# sur une version anterieure. Alimente scripts/etat.sh.
+if [ -r /app.version ]; then
+  cp /app.version "$HOME/.app-version" 2>/dev/null || true
+fi
+
 # Architecture (binaires telecharges au premier demarrage)
 case "$(uname -m)" in
   aarch64|arm64) ARCH=arm64 ;;
@@ -522,6 +529,22 @@ if [ "$SEED_AGENTS_MD" = "true" ] && [ ! -f /share/opencode/AGENTS.md ]; then
   cat > /share/opencode/AGENTS.md <<'EOF'
 # Regles du projet
 
+## Avant d'agir
+
+- L'etat du projet se lit dans `PLAN-ADDON.md` (§1 fait, §5 a faire) : ne jamais
+  affirmer un etat sans l'avoir lu.
+- Toute action sur un secret se lit dans `ROTATION-SECRETS.md` (§2 inventaire,
+  §3 fiches) avant d'etre entreprise.
+- Une version ne se bump qu'avec sa section `CHANGELOG` : le job `release` en
+  tire ses notes et la CI compare la premiere section au `version` des apps.
+- Le `CHANGELOG.md` racine de `ha-opencode` est la source ; les deux copies se
+  mettent a jour par copie, jamais a la main.
+- Une decision structurante se note dans `PLAN-ADDON.md` §2.x le jour meme.
+- `scripts/etat.sh` donne l'instantane (version installee vs depot, coherence
+  des CHANGELOG, compteurs de regles).
+
+## Regles
+
 - Lecture seule par defaut : demander avant toute modification.
 - Ne jamais afficher, copier ou committer un secret, un jeton ou un mot de passe.
 - Ne jamais editer `secrets.yaml` ni `.storage` a la main.
@@ -533,8 +556,8 @@ if [ "$SEED_AGENTS_MD" = "true" ] && [ ! -f /share/opencode/AGENTS.md ]; then
 - `/share/opencode` = espace de travail, `/config` = configuration Home Assistant,
   `/data` = etat prive de l'app.
 
-Ce fichier est consultatif : les permissions OpenCode et le montage de `/config`
-restent les seules barrieres appliquees par le runtime.
+Ce fichier est consultatif : les permissions OpenCode, les policies et le
+montage de `/config` restent les seules barrieres appliquees par le runtime.
 EOF
   chmod 644 /share/opencode/AGENTS.md
   echo "[opencode] AGENTS.md cree (modele par defaut)"

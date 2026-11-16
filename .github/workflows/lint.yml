@@ -95,6 +95,24 @@ jobs:
           fi
           echo "All changelog copies are identical."
 
+      # Une release tire ses notes de la premiere section du CHANGELOG. Sans ce
+      # controle, une version peut etre bumpee sans entree et la release nait
+      # avec un corps generique.
+      - name: Top changelog section matches the add-on version
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' opencode_vscode/config.yaml | head -n1)"
+          section="$(grep -m1 '^## ' CHANGELOG.md | sed 's/^##[[:space:]]*//')"
+          echo "config.yaml=${version:-<vide>} / CHANGELOG=${section:-<vide>}"
+          if [ -z "$version" ] || [ -z "$section" ]; then
+            echo "::error::Could not read the version or the first CHANGELOG section."
+            exit 1
+          fi
+          if [ "$version" != "$section" ]; then
+            echo "::error::The first CHANGELOG section ($section) does not match config.yaml ($version). Add the section before bumping."
+            exit 1
+          fi
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest

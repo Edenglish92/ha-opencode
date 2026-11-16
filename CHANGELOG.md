@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.10
+
+- New `/app.version` written at build time from the Home Assistant builder's
+  `BUILD_VERSION`, and copied to `~/.app-version` at start. It tells the version
+  actually running apart from the one in the repository — reading
+  `config.yaml` was not enough, and a version file is one line instead of an
+  exported variable inherited by every process.
+- The seeded `AGENTS.md` now opens with "before acting": read `PLAN-ADDON.md`
+  §1/§5 for the project state, `ROTATION-SECRETS.md` §2/§3 before touching a
+  secret, and the CHANGELOG before publishing. Same rule in the workspace copy.
+- New `scripts/etat.sh` (workspace): one-shot snapshot of the installed and
+  repository versions, CHANGELOG consistency, repository state, rule counts and
+  the workspace shell-rule duplicate guard.
+- CI: the first CHANGELOG section must match `config.yaml`, so a release can no
+  longer be born without notes.
+
 ## 0.8.9
 
 - Fix: the two workspace shell rules (`*/share/opencode/opencode.json*` and
