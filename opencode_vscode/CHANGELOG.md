@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.2
+
+- Fix: the workspace shell patterns are broadened to `*.opencode*`, so
+  `ls .opencode` — the directory itself, with no child path — is refused. The
+  0.9.1 pattern required a slash after the name, which still let the agent list
+  the folder's entries.
+- The former pattern stays in the managed list for pruning only, so it is
+  removed from the configuration instead of lingering.
+- Rule count unchanged; read/edit rules untouched.
+
 ## 0.9.1
 
 - Fix: the workspace rules (`opencode.json`, `opencode.jsonc`, `.opencode/`) are

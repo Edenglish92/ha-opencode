@@ -418,6 +418,10 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"read",  resource:".opencode/*"},
             {action:"edit",  resource:".opencode/*"},
             {action:"shell", resource:"*opencode.json*"},
+            {action:"shell", resource:"*.opencode*"},
+            {action:"shell", resource:"*/share/opencode/.opencode/*"},
+            # Motif 0.9.1, conserve pour le nettoyage uniquement : le prune le
+            # supprime et il n est plus emis (le motif sans slash le couvre).
             {action:"shell", resource:"*.opencode/*"} ];
         def is_managed($r):
           any(managed_rules[]; .action == $r.action and .resource == $r.resource);
@@ -468,8 +472,11 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"tool.use", resource:"read:.opencode/*"},
             {action:"tool.use", resource:"edit:.opencode/*"},
             {action:"tool.use", resource:"shell:*opencode.json*"},
-            {action:"tool.use", resource:"shell:*.opencode/*"},
+            {action:"tool.use", resource:"shell:*.opencode*"},
             {action:"tool.use", resource:"grep:*"} ];
+        def legacy_policies:
+          [ {action:"tool.use", resource:"shell:*.opencode/*"},
+            {action:"tool.use", resource:"shell:*/share/opencode/.opencode/*"} ];
         def is_managed_policy($p):
           any(managed_policies[]; .action == $p.action and .resource == $p.resource);
 
@@ -524,11 +531,11 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                 {action:"read", resource:".opencode/*", effect:"deny"},
                 {action:"edit", resource:".opencode/*", effect:"deny"},
                 {action:"shell", resource:"*opencode.json*", effect:"deny"},
-                {action:"shell", resource:"*.opencode/*", effect:"deny"}
+                {action:"shell", resource:"*.opencode*", effect:"deny"}
               ] else [] end)
            + extra_perms($extra_paths)) as $rules
         | ([ items($cfg.policies)
-             | select((is_managed_policy(.) or in_list(.; extra_policies($previous_paths))) | not) ]
+             | select((is_managed_policy(.) or in_list(.; legacy_policies) or in_list(.; extra_policies($previous_paths))) | not) ]
            + (if $deny_secrets then [ managed_policies[] | .effect = "deny" ] else [] end)
            + extra_policies($extra_paths)) as $pol
         | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)

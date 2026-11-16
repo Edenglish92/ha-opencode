@@ -1,5 +1,5 @@
 name: OpenCode VS Code Tunnel
-version: "0.9.1"
+version: "0.9.2"
 slug: opencode_vscode
 description: Tunnel VS Code (auth GitHub) et serveur OpenCode sur Home Assistant
 url: https://github.com/Edenglish92/ha-opencode/tree/main/opencode_vscode
