@@ -36,7 +36,10 @@ if [ "${#PASSWORD}" -lt "$MIN_PASSWORD_LENGTH" ]; then
 fi
 
 export HOME=/data/home
-export OPENCODE_PASSWORD="$PASSWORD"
+# Pas d'export de OPENCODE_PASSWORD : l'environnement de run.sh est herite par le
+# service puis par le shell des outils, ou la variable serait lisible. Le client
+# interne et `opencode-pair` lisent ~/.opencode-client.env, le serveur lit
+# service.json : rien ne depend de cet export.
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 mkdir -p "$HOME" /share/opencode /data/bin
@@ -50,13 +53,13 @@ esac
 
 # ---------------------------------------------------------------------------
 # Verification d'integrite des binaires telecharges
-# 0 = somme verifiee, 2 = aucune somme publiee (avertissement), 1 = ecart
+# 0 = somme verifiee, 1 = ecart OU somme absente (installation refusee)
 # ---------------------------------------------------------------------------
 verify_sha256() {
   local file="$1" expected="$2" label="$3" actual
   if [ -z "$expected" ]; then
-    echo "[avertissement] $label : aucune somme SHA256 publiee, integrite non verifiee."
-    return 2
+    echo "[erreur] $label : aucune somme SHA256 publiee, installation refusee."
+    return 1
   fi
   actual="$(sha256sum "$file" | awk '{print $1}')"
   if [ "$actual" != "$expected" ]; then
@@ -79,15 +82,27 @@ REMOTE_COMMIT="$(printf '%s' "$CLI_META" | jq -r '.version // empty' 2>/dev/null
 CLI_SHA="$(printf '%s' "$CLI_META" | jq -r '.sha256hash // empty' 2>/dev/null || true)"
 CLI_URL="$(printf '%s' "$CLI_META" | jq -r '.url // empty' 2>/dev/null || true)"
 if [ -z "$CLI_URL" ]; then
-  # API injoignable : ancienne resolution par redirection, sans somme.
-  CLI_URL="https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-${ARCH}"
-  REMOTE_COMMIT="$(curl -sIL -o /dev/null -w '%{url_effective}' "$CLI_URL" 2>/dev/null | sed -n 's|.*/stable/\([0-9a-f]\{40\}\).*|\1|p' || true)"
+  # Plus de repli sans somme : l'API de mise a jour est la seule source qui
+  # publie le SHA256, et une archive non verifiable n'est plus acceptee.
+  if [ -x "$CLI" ]; then
+    echo "[avertissement] metadonnees du CLI VS Code indisponibles : on conserve la version installee."
+  else
+    echo "[erreur] CLI VS Code introuvable et metadonnees indisponibles : arret."
+    exit 1
+  fi
 fi
 LOCAL_COMMIT="$(cat /data/bin/code.commit 2>/dev/null || true)"
 
-if [ ! -x "$CLI" ] || { [ -n "$REMOTE_COMMIT" ] && [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; }; then
+if [ -n "$CLI_URL" ] && { [ ! -x "$CLI" ] || { [ -n "$REMOTE_COMMIT" ] && [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; }; }; then
   echo "[opencode] telechargement du CLI VS Code (${ARCH})..."
-  if curl -fsSL --max-time 300 "$CLI_URL" -o /tmp/vscode-cli.tgz; then
+  if [ -z "$CLI_SHA" ]; then
+    if [ -x "$CLI" ]; then
+      echo "[avertissement] aucune somme publiee pour le CLI VS Code : mise a jour ignoree."
+    else
+      echo "[erreur] aucune somme publiee pour le CLI VS Code : installation refusee."
+      exit 1
+    fi
+  elif curl -fsSL --max-time 300 "$CLI_URL" -o /tmp/vscode-cli.tgz; then
     rc=0
     verify_sha256 /tmp/vscode-cli.tgz "$CLI_SHA" "CLI VS Code" || rc=$?
     if [ "$rc" -eq 1 ]; then
@@ -156,7 +171,14 @@ if [ ! -x "$OC_BIN" ] || [ "$INSTALLED_VERSION" != "$OC_VERSION" ]; then
   fi
   OC_SHA="$(printf '%s' "$RELEASE_JSON" | jq -r --arg n "$OC_ASSET" \
     '.assets[]? | select(.name == $n) | .digest // empty' 2>/dev/null | sed 's/^sha256://' || true)"
-  if curl -fsSL --max-time 300 \
+  if [ -z "$OC_SHA" ]; then
+    if [ -x "$OC_BIN" ]; then
+      echo "[avertissement] aucune somme publiee pour OpenCode ${OC_VERSION} : mise a jour ignoree."
+    else
+      echo "[erreur] aucune somme publiee pour OpenCode ${OC_VERSION} : installation refusee."
+      exit 1
+    fi
+  elif curl -fsSL --max-time 300 \
       "https://github.com/anomalyco/opencode/releases/download/v${OC_VERSION}/${OC_ASSET}" \
       -o /tmp/opencode.tgz; then
     rc=0
@@ -365,7 +387,11 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"read",  resource:"/config/secrets.yaml"},
             {action:"read",  resource:"/config/.storage/*"},
             {action:"read",  resource:"/data/*"},
-            {action:"read",  resource:"/data/home/.opencode/plan/*"} ];
+            {action:"read",  resource:"/data/home/.opencode/plan/*"},
+            {action:"read",  resource:"/share/opencode/opencode.json"},
+            {action:"edit",  resource:"/share/opencode/opencode.json"},
+            {action:"read",  resource:"/share/opencode/opencode.jsonc"},
+            {action:"edit",  resource:"/share/opencode/opencode.jsonc"} ];
         def is_managed($r):
           any(managed_rules[]; .action == $r.action and .resource == $r.resource);
 
@@ -400,6 +426,11 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"tool.use", resource:"shell:*/.opencode-client.env*"},
             {action:"tool.use", resource:"shell:*/.bash_history*"},
             {action:"tool.use", resource:"shell:*/data/options.json*"},
+            {action:"tool.use", resource:"read:/share/opencode/opencode.json"},
+            {action:"tool.use", resource:"edit:/share/opencode/opencode.json"},
+            {action:"tool.use", resource:"read:/share/opencode/opencode.jsonc"},
+            {action:"tool.use", resource:"edit:/share/opencode/opencode.jsonc"},
+            {action:"tool.use", resource:"shell:*/share/opencode/opencode.json*"},
             {action:"tool.use", resource:"grep:*"} ];
         def is_managed_policy($p):
           any(managed_policies[]; .action == $p.action and .resource == $p.resource);
@@ -439,7 +470,12 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                 {action:"shell", resource:"*/.git-credentials*", effect:"deny"},
                 {action:"shell", resource:"*/.opencode-client.env*", effect:"deny"},
                 {action:"shell", resource:"*/.bash_history*", effect:"deny"},
-                {action:"shell", resource:"*/data/options.json*", effect:"deny"}
+                {action:"shell", resource:"*/data/options.json*", effect:"deny"},
+                {action:"read", resource:"/share/opencode/opencode.json", effect:"deny"},
+                {action:"edit", resource:"/share/opencode/opencode.json", effect:"deny"},
+                {action:"read", resource:"/share/opencode/opencode.jsonc", effect:"deny"},
+                {action:"edit", resource:"/share/opencode/opencode.jsonc", effect:"deny"},
+                {action:"shell", resource:"*/share/opencode/opencode.json*", effect:"deny"}
               ] else [] end)
            + extra_perms($extra_paths)) as $rules
         | ([ items($cfg.policies)
@@ -572,16 +608,20 @@ escape_sed() {
   printf '%s' "${value//$'\n'/\\n}"
 }
 
-REDACT=(-e 's/args="\[[^]]*password[^]]*\]"/args="[redacted]"/g')
-if [ -n "$PASSWORD" ]; then
-  REDACT+=(-e "s/$(escape_sed "$PASSWORD")/[redacted]/g")
-fi
-if [ -n "$MCP_URL" ]; then
-  REDACT+=(-e "s/$(escape_sed "$MCP_URL")/[redacted]/g")
-fi
+REDACT_SCRIPT="$(mktemp)"
+{
+  printf '%s\n' 's/args="\[[^]]*password[^]]*\]"/args="[redacted]"/g'
+  if [ -n "$PASSWORD" ]; then
+    printf 's/%s/[redacted]/g\n' "$(escape_sed "$PASSWORD")"
+  fi
+  if [ -n "$MCP_URL" ]; then
+    printf 's/%s/[redacted]/g\n' "$(escape_sed "$MCP_URL")"
+  fi
+} > "$REDACT_SCRIPT"
+chmod 600 "$REDACT_SCRIPT"
 
 if [ -f "$LOG" ]; then
-  sed -i "${REDACT[@]}" "$LOG" || true
+  sed -i -f "$REDACT_SCRIPT" "$LOG" || true
 fi
 
 echo "[opencode] demarrage du service OpenCode"
@@ -612,7 +652,11 @@ fi
 # -n 0 : seules les nouvelles lignes, sinon chaque demarrage rejoue tout
 # l'historique de opencode.log dans le journal de l'app.
 touch "$LOG"
-tail -n 0 -F "$LOG" | sed -u "${REDACT[@]}" &
+tail -n 0 -F "$LOG" | sed -u -f "$REDACT_SCRIPT" &
+# sed a lu le script au demarrage : on supprime le fichier pour ne pas laisser
+# le mot de passe sur disque.
+sleep 1
+rm -f "$REDACT_SCRIPT"
 
 # Surveillance : relance le service si le port ne repond plus
 while true; do

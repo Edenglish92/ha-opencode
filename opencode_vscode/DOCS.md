@@ -128,6 +128,8 @@ Quand une option `hardening_*` est active, l'app écrit les règles correspondan
 
 La seule règle `allow` est volontaire : elle vient **après** le `deny` sur `/data` parce que la dernière règle qui correspond l'emporte, et l'agent Plan enregistre son fichier de plan dans `~/.opencode/plan`. Une règle `allow` placée avant un `deny` n'aurait aucun effet.
 
+Le `opencode.json` et le `opencode.jsonc` du workspace sont eux-mêmes **refusés en lecture et en écriture**. Une configuration de projet n'est pas qu'un jeu de règles : ses variables acceptent une substitution `{file:…}`, que le chargeur résout hors de toute permission d'outil et qui peut atterrir dans le prompt système d'un agent. Refuser le fichier retire à l'assistant la capacité d'écrire cette entrée ; une configuration que **toi** tu écris reste bien sûr chargée.
+
 Ces règles appartiennent à l'app : les supprimer ou les modifier à la main n'a pas d'effet durable, elles réapparaissent au redémarrage. Pour les changer, utiliser les options de l'app. Les règles portant sur d'autres actions ou chemins sont conservées.
 
 Les permissions filtrent **par outil**. Les règles `shell` ci-dessus couvrent les formes simples (`cat`, `sed -i`, `echo >`, `cp`, `grep`, y compris après un `cd /config/.storage`, et les chemins écrits `$HOME/...` puisque le suffixe reste présent) et **ne bloquent pas** le reste des commandes. Elles restent **best-effort** : un chemin construit (`F=…; cat $F`) ou un outil détourné peut passer. Une édition faite par toi dans VS Code n'est pas concernée non plus. Pour un contrôle plus large, activer `hardening_ask_shell` ; pour une barrière absolue, utiliser l'app read-only.
@@ -163,6 +165,7 @@ Dit franchement, parce que l'alternative est une fausse impression de sécurité
 - **`glob` est filtré par son motif lui aussi**, et peut donc lister les noms sous `/config/.storage`. Il ne renvoie jamais le contenu des fichiers, c'est pourquoi il reste actif.
 - **Les règles `shell` sont des filtres de sous-chaîne.** Un glob (`wc -l /config/secret*.yaml`), une variable (`F=…; cat $F`) ou un outil enrobé les contournent. `hardening_ask_shell` est le seul contrôle large.
 - **L'app read-only protège l'intégrité, pas la confidentialité** : elle rend l'écriture impossible, elle ne cache pas un seul octet.
+- **Le mot de passe de l'API est à portée d'un shell.** Le serveur et les outils tournent sous le même root : `opencode service get password` (et, avant 0.8.7, une variable exportée) restitue le secret, et l'endpoint shell de l'API ne passe pas par les règles d'outils. Fermer le shell est le seul confinement disponible aujourd'hui ; le vrai correctif est de faire tourner l'agent sous une autre identité.
 
 Si un secret a été affiché au modèle, aucun changement de permission ne le rend inoffensif : il faut le **faire tourner**. Considère comme divulgué tout ce que l'assistant a pu lire.
 
@@ -284,6 +287,8 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 | `opencode.json.invalide.<date>` apparaît | La config OpenCode n'était pas un JSON valide : elle a été conservée et remplacée par une base propre, pour ne pas démarrer sans règles. Reporter les réglages nécessaires. |
 | L'app refuse de démarrer après une fusion jq | Le fichier de config n'a pas pu être réécrit : l'app s'arrête plutôt que de tourner sans permissions. Vérifier le journal, restaurer `opencode.json.invalide.<date>` si besoin. |
 | `SHA256 inattendu` dans le journal | L'archive téléchargée ne correspond pas à la somme publiée par l'éditeur : elle est rejetée et le binaire déjà installé est conservé (arrêt au premier démarrage). Vérifier réseau, proxy ou cache. |
+| `aucune somme publiee` et app à l'arrêt | Depuis 0.8.7 une archive sans somme vérifiable n'est plus installée. Si les métadonnées de l'éditeur sont injoignables au premier démarrage, l'app s'arrête avec ce message : vérifier l'accès à `update.code.visualstudio.com` (CLI) et `api.github.com` (OpenCode). |
+| L'agent ne peut plus lire `opencode.json` du workspace | Comportement voulu depuis 0.8.7 : une configuration de projet peut charger un fichier arbitraire via `{file:…}` hors des permissions d'outils. Le fichier reste lisible par toi, et une config que tu écris est toujours chargée. |
 | Le journal de l'app ne montre plus l'historique | Comportement voulu depuis 0.8.5 : le miroir démarre à `tail -n 0`, donc seules les nouvelles lignes apparaissent. L'historique complet reste dans `/data/home/.local/share/opencode/log/opencode.log`. |
 | Une permission personnalisée disparaît | Elle cible un motif géré par l'app : passer par les options `hardening_*`. |
 | Caractères accentués illisibles | Vérifier la locale du terminal. À l'export/import de sessions, éviter de capturer la sortie d'un CLI UTF-8 avec PowerShell 5.1 en CP437 : rediriger via `cmd /c` ou forcer `[Console]::OutputEncoding` en UTF-8. |

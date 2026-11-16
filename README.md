@@ -108,6 +108,8 @@ When a `hardening_*` option is enabled, the app writes the matching rules into `
 
 Policies are evaluated after the permission rules, after agent rules and after saved approvals, and they can only deny — never grant. That is what makes them hold when a project-level `opencode.json` (which the assistant is able to write in `/share/opencode`) tries to widen the rules.
 
+The workspace `opencode.json` and `opencode.jsonc` are themselves **refused in read and write**. A project configuration is not just a set of rules: its variables support `{file:…}` substitution, which the loader resolves outside every tool permission and can inject into an agent's system prompt. Denying the file removes the assistant's ability to author that input. A configuration you write yourself is of course still loaded.
+
 `grep` is denied under `hardening_deny_secrets` because its permission resource is the search **pattern**, not the path: a path-based rule is never consulted, so the tool could quietly pull secret values into the model context. Use the shell (`rg`) when you need a search; `hardening_ask_shell` is the real control there.
 
 `hardening_deny_paths` covers the secrets that live outside `secrets.yaml`: a Zigbee2MQTT `configuration.yaml`, an ESPHome `secrets.yaml`, anything readable under `/config`. Each absolute path gets `read`/`edit` denies, the matching non-overridable `tool.use` policies, and a shell pattern on the literal path. The app keeps a record of the paths it applied (`.ha-opencode-extra-paths.json`, mode `600`, under `/data`) so that **removing a path from the option also removes its rules** at the next start — otherwise they would stay active, invisible, and you would keep being denied a file you thought you had released.
@@ -122,6 +124,7 @@ Stated plainly, because the alternative is a false sense of safety:
 - **`glob` is gated by its pattern too**, so it can list names under `/config/.storage`. It never returns file contents, which is why it stays enabled.
 - **The `shell` rules are substring filters.** A glob (`wc -l /config/secret*.yaml`), a variable (`F=…; cat $F`) or a wrapper evades them. `hardening_ask_shell` is the only broad control.
 - **The read-only app protects integrity, not confidentiality**: it makes writes impossible, it does not hide a single byte.
+- **The API password is within reach of a shell.** The server and the tools run as the same root user: `opencode service get password` (and, before 0.8.7, an exported variable) returns the API secret, and the API's own shell endpoint does not go through the tool rules. Denying the shell is the only containment available today; the real fix is running the agent under a different identity.
 
 If a secret was ever displayed to the model, no permission change makes it safe again — rotate it. Treat anything the assistant could read as disclosed.
 

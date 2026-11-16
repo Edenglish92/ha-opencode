@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.7
+
+- Security: the workspace project configuration (`/share/opencode/opencode.json`
+  and `opencode.jsonc`) is refused in read and write, through `permissions` and
+  the non-overridable `policies`. That was the only path by which the assistant
+  could author the configuration loader's input, where a `{file:…}` substitution
+  loads a file — a secret — into the system prompt, bypassing every tool rule.
+- Security: the app no longer exports `OPENCODE_PASSWORD`. The variable was
+  inherited by the managed service and then by the tools' shell, where it could
+  be read; nothing else in `run.sh` used it. This reduces the surface rather
+  than closing it: `opencode service get password` still returns the stored
+  value, so a shell that shares the server's identity can always recover it.
+- Security: log redaction no longer carries the password or the MCP URL in the
+  arguments of a long-lived `sed`. The substitution script goes to a mode-600
+  file, is read with `sed -f`, then deleted.
+- Downloads require a published checksum: an archive without one is refused
+  instead of installed unverified. Consequence: if the vendor metadata cannot be
+  fetched at first start, the binary is not installed and the app stops with an
+  explicit message.
+- Docs: the three behaviours above, and why they narrow the shared-root exposure
+  without pretending to remove it.
+
 ## 0.8.6
 
 - New option `hardening_deny_paths`: a list of absolute paths refused in read
