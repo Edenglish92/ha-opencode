@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.6
+
+- New option `hardening_deny_paths`: a list of absolute paths refused in read
+  and write, for secrets that live outside `secrets.yaml` — a Zigbee2MQTT
+  `configuration.yaml`, an ESPHome `secrets.yaml`. Each path gets `read`/`edit`
+  denies in `permissions`, the matching non-overridable `tool.use` policies, and
+  a shell pattern on the literal path. Non-absolute entries are reported and
+  ignored.
+- The app records the paths it applied in `.ha-opencode-extra-paths.json`
+  (mode `600`, under `/data`), so removing a path from the option also removes
+  its rules at the next start. Without that memory the old denies would stay
+  active and invisible, silently blocking a file the option no longer mentions.
+- Docs: the option, why it complements moving a secret out of `/config` rather
+  than replacing it, and its limits (a shell path relative to `cd`, a glob, or a
+  symlink still bypasses the literal shell pattern).
+
 ## 0.8.5
 
 - Security: the downloaded binaries are verified before extraction. OpenCode is

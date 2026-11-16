@@ -16,6 +16,11 @@ HARDEN_ASK_CONFIG="$(jq -r 'if .hardening_ask_config_edit == true then "true" el
 HARDEN_ASK_SHELL="$(jq -r 'if .hardening_ask_shell == true then "true" else "false" end' "$OPTIONS")"
 SEED_AGENTS_MD="$(jq -r 'if .seed_agents_md == false then "false" else "true" end' "$OPTIONS")"
 INSTALL_OC_EXT="$(jq -r 'if .install_opencode_extension == false then "false" else "true" end' "$OPTIONS")"
+# Chemins sensibles propres a l'installation (fichiers de secrets d'autres
+# add-ons, par exemple) : refuses en lecture et en ecriture. Seuls les chemins
+# absolus sont acceptes ; les autres sont signales et ignores.
+EXTRA_DENY_PATHS="$(jq -c '[ (.hardening_deny_paths // [])[] | select(type == "string" and startswith("/")) ]' "$OPTIONS")"
+EXTRA_DENY_DROPPED="$(jq -c '[ (.hardening_deny_paths // [])[] | select(type != "string" or (startswith("/") | not)) ]' "$OPTIONS")"
 
 if [ -z "$PASSWORD" ]; then
   echo "[erreur] Renseigne 'opencode_password' dans la configuration de l'app, puis redemarre."
@@ -242,6 +247,21 @@ ln -sf /data/bin/opencode-pair /usr/local/bin/opencode-pair
 CFG="$HOME/.config/opencode/opencode.json"
 mkdir -p "$(dirname "$CFG")"
 
+# Memoire des chemins refuses au demarrage precedent : sans elle, retirer un
+# chemin de l'option laisserait ses regles en place indefiniment.
+EXTRA_STATE="$HOME/.config/opencode/.ha-opencode-extra-paths.json"
+if [ -f "$EXTRA_STATE" ] && jq -e . "$EXTRA_STATE" >/dev/null 2>&1; then
+  EXTRA_DENY_PREVIOUS="$(jq -c '[ .[] | select(type == "string") ]' "$EXTRA_STATE")"
+else
+  EXTRA_DENY_PREVIOUS='[]'
+fi
+EXTRA_COUNT="$(printf '%s' "$EXTRA_DENY_PATHS" | jq 'length')"
+PREV_COUNT="$(printf '%s' "$EXTRA_DENY_PREVIOUS" | jq 'length')"
+DROPPED_COUNT="$(printf '%s' "$EXTRA_DENY_DROPPED" | jq 'length')"
+if [ "$DROPPED_COUNT" -gt 0 ]; then
+  echo "[avertissement] 'hardening_deny_paths' ignore ${DROPPED_COUNT} entree(s) non absolue(s) : $(printf '%s' "$EXTRA_DENY_DROPPED" | jq -r 'join(", ")')"
+fi
+
 # Un JSON invalide ne doit pas etre ignore : demarrer sans les regles gerees
 # reviendrait a desactiver le durcissement en silence. On conserve l'original
 # puis on repart d'une base vide, que les blocs suivants reecrivent.
@@ -314,13 +334,17 @@ fi
 if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
    || [ "$HARDEN_DENY_SECRETS" = "true" ] \
    || [ "$HARDEN_ASK_CONFIG" = "true" ] \
-   || [ "$HARDEN_ASK_SHELL" = "true" ]; then
+   || [ "$HARDEN_ASK_SHELL" = "true" ] \
+   || [ "$EXTRA_COUNT" -gt 0 ] \
+   || [ "$PREV_COUNT" -gt 0 ]; then
   if jq \
       --arg agent "$DEFAULT_AGENT_OPT" \
       --arg model "$DEFAULT_MODEL_OPT" \
       --argjson deny_secrets "$HARDEN_DENY_SECRETS" \
       --argjson ask_config "$HARDEN_ASK_CONFIG" \
-      --argjson ask_shell "$HARDEN_ASK_SHELL" '
+      --argjson ask_shell "$HARDEN_ASK_SHELL" \
+      --argjson extra_paths "$EXTRA_DENY_PATHS" \
+      --argjson previous_paths "$EXTRA_DENY_PREVIOUS" '
         def items($v): ($v // []) | if type == "array" then .[] else empty end;
         def managed_rules:
           [ {action:"shell", resource:"*"},
@@ -380,8 +404,22 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
         def is_managed_policy($p):
           any(managed_policies[]; .action == $p.action and .resource == $p.resource);
 
+        # Chemins ajoutes via hardening_deny_paths
+        def extra_perms($paths):
+          [ $paths[] as $p
+            | {action:"read", resource:$p, effect:"deny"},
+              {action:"edit", resource:$p, effect:"deny"} ];
+        def extra_policies($paths):
+          [ $paths[] as $p
+            | {action:"tool.use", resource:("read:" + $p), effect:"deny"},
+              {action:"tool.use", resource:("edit:" + $p), effect:"deny"},
+              {action:"tool.use", resource:("shell:*" + $p + "*"), effect:"deny"} ];
+        def in_list($r; $list):
+          any($list[]; .action == $r.action and .resource == $r.resource);
+
         . as $cfg
-        | ([ items($cfg.permissions) | select(is_managed(.) | not) ]
+        | ([ items($cfg.permissions)
+             | select((is_managed(.) or in_list(.; extra_perms($previous_paths))) | not) ]
            + (if $ask_shell then [{action:"shell", resource:"*", effect:"ask"}] else [] end)
            + (if $ask_config then [{action:"edit", resource:"/config/*", effect:"ask"}] else [] end)
            + (if $deny_secrets then [
@@ -402,9 +440,12 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                 {action:"shell", resource:"*/.opencode-client.env*", effect:"deny"},
                 {action:"shell", resource:"*/.bash_history*", effect:"deny"},
                 {action:"shell", resource:"*/data/options.json*", effect:"deny"}
-              ] else [] end)) as $rules
-        | ([ items($cfg.policies) | select(is_managed_policy(.) | not) ]
-           + (if $deny_secrets then [ managed_policies[] | .effect = "deny" ] else [] end)) as $pol
+              ] else [] end)
+           + extra_perms($extra_paths)) as $rules
+        | ([ items($cfg.policies)
+             | select((is_managed_policy(.) or in_list(.; extra_policies($previous_paths))) | not) ]
+           + (if $deny_secrets then [ managed_policies[] | .effect = "deny" ] else [] end)
+           + extra_policies($extra_paths)) as $pol
         | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)
         | (if ($pol | length) > 0 then .policies = $pol else del(.policies) end)
         | (if $agent != "" then .default_agent = $agent else . end)
@@ -413,6 +454,14 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
       mv "$CFG.tmp" "$CFG"
       chmod 600 "$CFG"
       echo "[opencode] agent/modele, permissions et policies mis a jour"
+      # Memoire des chemins appliques, pour pouvoir les retirer proprement.
+      if [ "$EXTRA_COUNT" -gt 0 ]; then
+        printf '%s' "$EXTRA_DENY_PATHS" > "$EXTRA_STATE"
+        chmod 600 "$EXTRA_STATE"
+        echo "[opencode] ${EXTRA_COUNT} chemin(s) supplementaire(s) refuse(s)"
+      else
+        rm -f "$EXTRA_STATE"
+      fi
     else
       rm -f "$CFG.tmp"
       echo "[erreur] echec de la fusion agent/permissions (jq) : arret pour ne pas demarrer sans regles."

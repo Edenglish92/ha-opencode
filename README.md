@@ -67,6 +67,7 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 | `hardening_deny_secrets` | `true` | Deny reading and editing `secrets.yaml`, `.storage` and `/data`; deny shell commands that mention those paths or the app's credential files (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`); disable the `grep` tool. The critical ones are also written as non-overridable policies. |
 | `hardening_ask_config_edit` | `false` | Ask for approval before any edit under `/config`. |
 | `hardening_ask_shell` | `false` | Ask for approval before shell commands. |
+| `hardening_deny_paths` | `[]` | Absolute paths refused in read and write, for secrets that live outside `secrets.yaml` (e.g. `/config/zigbee2mqtt/configuration.yaml`, `/config/esphome/secrets.yaml`). Applied through non-overridable policies; removing a path cleans its rules up at the next start. |
 | `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
 | `install_opencode_extension` | `true` | Install the OpenCode V2 VS Code extension into the server on first start if missing. |
 | `accept_license` | `true` | Accept the VS Code Server license terms. |
@@ -107,6 +108,8 @@ When a `hardening_*` option is enabled, the app writes the matching rules into `
 Policies are evaluated after the permission rules, after agent rules and after saved approvals, and they can only deny — never grant. That is what makes them hold when a project-level `opencode.json` (which the assistant is able to write in `/share/opencode`) tries to widen the rules.
 
 `grep` is denied under `hardening_deny_secrets` because its permission resource is the search **pattern**, not the path: a path-based rule is never consulted, so the tool could quietly pull secret values into the model context. Use the shell (`rg`) when you need a search; `hardening_ask_shell` is the real control there.
+
+`hardening_deny_paths` covers the secrets that live outside `secrets.yaml`: a Zigbee2MQTT `configuration.yaml`, an ESPHome `secrets.yaml`, anything readable under `/config`. Each absolute path gets `read`/`edit` denies, the matching non-overridable `tool.use` policies, and a shell pattern on the literal path. The app keeps a record of the paths it applied (`.ha-opencode-extra-paths.json`, mode `600`, under `/data`) so that **removing a path from the option also removes its rules** at the next start — otherwise they would stay active, invisible, and you would keep being denied a file you thought you had released.
 
 If a policy cannot be applied at start (invalid JSON), the app backs the file up as `opencode.json.invalide.<date>` and rewrites a clean one rather than running without rules; a failed rewrite stops the app instead of leaving it unprotected.
 

@@ -69,6 +69,7 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | `hardening_deny_secrets` | booléen | `true` | Interdit en **lecture et en écriture** `secrets.yaml`, `.storage` et `/data` (seul `~/.opencode/plan` reste accessible, pour l'agent Plan) ; bloque aussi, côté shell, les commandes qui citent ces chemins ou les fichiers d'identifiants de l'app (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`) ; désactive l'outil `grep`. Les règles critiques sont aussi écrites en *policies* non surchargeables. |
 | `hardening_ask_config_edit` | booléen | `false` | Demande confirmation avant toute édition sous `/config`. |
 | `hardening_ask_shell` | booléen | `false` | Demande confirmation avant toute commande shell. |
+| `hardening_deny_paths` | liste | `[]` | Chemins absolus refusés en lecture et en écriture, pour les secrets hors `secrets.yaml` (ex. `/config/zigbee2mqtt/configuration.yaml`, `/config/esphome/secrets.yaml`). Appliqué via des policies non surchargeables ; retirer un chemin supprime ses règles au démarrage suivant. |
 | `seed_agents_md` | booléen | `true` | Crée `/share/opencode/AGENTS.md` au premier démarrage **s'il est absent** ; ne l'écrase jamais. |
 | `install_opencode_extension` | booléen | `true` | Installe l'extension VS Code **OpenCode V2** dans le serveur au premier démarrage si elle manque. |
 
@@ -149,6 +150,8 @@ En plus des permissions, l'app écrit un tableau `policies` dans le même fichie
 Les policies sont évaluées **après** les permissions, après les règles d'agent et après les approbations enregistrées, et elles ne peuvent que refuser — jamais accorder. C'est ce qui les fait tenir face à un `opencode.json` de projet que l'assistant pourrait écrire lui-même dans `/share/opencode` pour élargir ses droits.
 
 L'outil `grep` est désactivé sous `hardening_deny_secrets` parce que sa ressource de permission est le **motif** recherché, pas le chemin : aucune règle de chemin ne s'applique, et l'outil pouvait donc ramener des valeurs de `secrets.yaml` dans le contexte du modèle sans que rien ne le signale. Pour chercher, l'agent passe par le shell (`rg`) ; `hardening_ask_shell` est le vrai levier là.
+
+`hardening_deny_paths` couvre les secrets qui vivent hors de `secrets.yaml` : un `configuration.yaml` de Zigbee2MQTT, un `secrets.yaml` d'ESPHome, tout fichier lisible sous `/config`. Chaque chemin absolu reçoit un `deny` de lecture et d'écriture, les policies `tool.use` correspondantes (non surchargeables) et un motif shell sur le chemin littéral. L'app conserve la liste des chemins appliqués (`.ha-opencode-extra-paths.json`, mode `600`, sous `/data`) pour que **retirer un chemin de l'option supprime aussi ses règles** au démarrage suivant — sinon elles resteraient actives, invisibles, et un fichier que tu croyais libéré resterait refusé.
 
 Si la configuration ne peut pas être appliquée (JSON invalide), l'app conserve l'original en `opencode.json.invalide.<date>` et réécrit un fichier propre plutôt que de démarrer sans règles. Un échec de réécriture arrête l'app au lieu de la laisser sans protection.
 
