@@ -61,7 +61,7 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | `tunnel_name` | texte | `opencode` | Nom du tunnel VS Code. L'URL devient `https://vscode.dev/tunnel/<nom>`. Défaut `opencode-ro` dans l'app read-only. |
 | `accept_license` | booléen | `true` | Accepte les termes de licence du serveur VS Code (`--accept-server-license-terms`). |
 | `opencode_password` | mot de passe | vide | **Obligatoire.** Mot de passe Basic auth de l'API OpenCode (utilisateur : `opencode`), **16 caractères minimum**. Vide ou trop court = l'app refuse de démarrer. |
-| `public_url` | texte | — | URL publique utilisée par `opencode-pair` pour construire les liens de pairing (ex. `https://opencode.example.com`). |
+| `public_url` | texte | — | URL publique utilisée par `opencode-pair` pour construire les liens de pairing (ex. `https://opencode.example.com`). Un redémarrage de l'app est nécessaire après modification. |
 | `ha_mcp_url` | mot de passe | vide | URL complète du serveur MCP `ha-mcp` distant (contient un jeton). Vide = la clé `ha-mcp` est retirée de la configuration OpenCode. |
 | `opencode_version` | texte | `2.3.0` | Version d'OpenCode à installer. `latest` interroge l'API GitHub au démarrage. |
 | `default_agent` | texte | `plan` | Agent par défaut écrit dans `opencode.json`. Vide = clé inchangée. |
@@ -229,6 +229,8 @@ Les wrappers se trouvent dans `/data/bin` et sont liés dans `/usr/local/bin`.
 L'URL publique doit pointer vers `http://<hostname-du-conteneur>:4096` (le conteneur est joignable par son nom sur le réseau Docker `hassio`), ou vers l'IP de l'hôte si le port est publié.
 
 Pairing : exécuter `opencode-pair` dans un terminal du conteneur, puis scanner le QR ou coller le lien dans l'app. Chaque code est **à usage unique** et expire en 5 minutes : ne pas ouvrir le lien d'abord dans un navigateur, ni le transmettre par une messagerie (l'aperçu consomme le code).
+
+> ⚠️ Utiliser **`opencode-pair`** (avec le tiret). `opencode pair` ne cible pas ce serveur : il génère des adresses (`127.0.0.1`, IP Docker `172.30.x`) inaccessibles depuis le téléphone. `public_url` doit être renseigné **puis l'app redémarrée** : le helper lit cette valeur dans un fichier régénéré au démarrage.
 
 ### API
 
