@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.9
+
+- Fix: the two workspace shell rules (`*/share/opencode/opencode.json*` and
+  `*/share/opencode/.opencode/*`) are now declared in the managed list, so they
+  are pruned before being rewritten. They were emitted in the deny block only,
+  which meant **one extra copy at every start** — two copies after two
+  restarts, four after four. An existing duplicate is removed at the next start,
+  since the rule is now recognised.
+- Nothing changes functionally: the same paths stay refused.
+
 ## 0.8.8
 
 - Security: `/share/opencode/.opencode/` is refused in read and write, in

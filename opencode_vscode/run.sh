@@ -393,7 +393,9 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             {action:"read",  resource:"/share/opencode/opencode.jsonc"},
             {action:"edit",  resource:"/share/opencode/opencode.jsonc"},
             {action:"read",  resource:"/share/opencode/.opencode/*"},
-            {action:"edit",  resource:"/share/opencode/.opencode/*"} ];
+            {action:"edit",  resource:"/share/opencode/.opencode/*"},
+            {action:"shell", resource:"*/share/opencode/opencode.json*"},
+            {action:"shell", resource:"*/share/opencode/.opencode/*"} ];
         def is_managed($r):
           any(managed_rules[]; .action == $r.action and .resource == $r.resource);
 
