@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.3
+
+- CI: the monthly refresh now triggers the release chain explicitly. A commit
+  pushed with `GITHUB_TOKEN` does not start workflows, so the version bump used
+  to leave the Supervisor offering a version whose image was never published.
+  The chain is now bump → Lint → Build on the same commit; a manual Build run
+  is accepted only for a commit that already has a successful Lint run, and a
+  final job fails if the version tag is missing from the registry.
+- Security: `opencode_password` must now be at least 16 characters long; the
+  app refuses to start otherwise. **Breaking** for an existing shorter value.
+- Security: `hardening_deny_secrets` now denies **reading** `secrets.yaml` and
+  `.storage/*` (it only asked for confirmation before) and denies reading
+  `/data`, which holds the API password, the MCP token and the tunnel
+  authentication. Shell commands aimed at the app's credential files
+  (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`,
+  `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`,
+  `~/.bash_history`, `/data/options.json`) are denied too. `~/.opencode/plan`
+  stays readable so the Plan agent can reload its own plan.
+- Docs: pairing window of the VS Code tunnel device code, updated permission
+  list, and the real release chain.
+
 ## 0.8.2
 
 - Security: the API password is no longer passed as a CLI argument, so it is

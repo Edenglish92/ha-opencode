@@ -22,6 +22,14 @@ if [ -z "$PASSWORD" ]; then
   exit 1
 fi
 
+# Un mot de passe partage protege une API qui peut lire /config et piloter
+# Home Assistant : refuser les valeurs courtes plutot que de les tolerer.
+MIN_PASSWORD_LENGTH=16
+if [ "${#PASSWORD}" -lt "$MIN_PASSWORD_LENGTH" ]; then
+  echo "[erreur] 'opencode_password' doit comporter au moins ${MIN_PASSWORD_LENGTH} caracteres (${#PASSWORD} actuellement)."
+  exit 1
+fi
+
 export HOME=/data/home
 export OPENCODE_PASSWORD="$PASSWORD"
 export LANG=C.UTF-8
@@ -205,11 +213,22 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
             [ {action:"shell", resource:"*"},
               {action:"shell", resource:"*secrets.yaml*"},
               {action:"shell", resource:"*/.storage*"},
+              {action:"shell", resource:"*/.config/opencode/*"},
+              {action:"shell", resource:"*/.local/share/opencode/*"},
+              {action:"shell", resource:"*/.vscode/cli/*"},
+              {action:"shell", resource:"*/.copilot/*"},
+              {action:"shell", resource:"*/.git-credentials*"},
+              {action:"shell", resource:"*/.opencode-client.env*"},
+              {action:"shell", resource:"*/.bash_history*"},
+              {action:"shell", resource:"*/data/options.json*"},
               {action:"edit",  resource:"/config/*"},
               {action:"edit",  resource:"/config/secrets.yaml"},
               {action:"edit",  resource:"/config/.storage/*"},
               {action:"edit",  resource:"/data/*"},
-              {action:"read",  resource:"/config/secrets.yaml"} ];
+              {action:"read",  resource:"/config/secrets.yaml"},
+              {action:"read",  resource:"/config/.storage/*"},
+              {action:"read",  resource:"/data/*"},
+              {action:"read",  resource:"/data/home/.opencode/plan/*"} ];
           def is_managed($r):
             any(managed_rules[]; .action == $r.action and .resource == $r.resource);
 
@@ -221,9 +240,20 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
                   {action:"edit", resource:"/config/secrets.yaml", effect:"deny"},
                   {action:"edit", resource:"/config/.storage/*", effect:"deny"},
                   {action:"edit", resource:"/data/*", effect:"deny"},
-                  {action:"read", resource:"/config/secrets.yaml", effect:"ask"},
+                  {action:"read", resource:"/config/secrets.yaml", effect:"deny"},
+                  {action:"read", resource:"/config/.storage/*", effect:"deny"},
+                  {action:"read", resource:"/data/*", effect:"deny"},
+                  {action:"read", resource:"/data/home/.opencode/plan/*", effect:"allow"},
                   {action:"shell", resource:"*secrets.yaml*", effect:"deny"},
-                  {action:"shell", resource:"*/.storage*", effect:"deny"}
+                  {action:"shell", resource:"*/.storage*", effect:"deny"},
+                  {action:"shell", resource:"*/.config/opencode/*", effect:"deny"},
+                  {action:"shell", resource:"*/.local/share/opencode/*", effect:"deny"},
+                  {action:"shell", resource:"*/.vscode/cli/*", effect:"deny"},
+                  {action:"shell", resource:"*/.copilot/*", effect:"deny"},
+                  {action:"shell", resource:"*/.git-credentials*", effect:"deny"},
+                  {action:"shell", resource:"*/.opencode-client.env*", effect:"deny"},
+                  {action:"shell", resource:"*/.bash_history*", effect:"deny"},
+                  {action:"shell", resource:"*/data/options.json*", effect:"deny"}
                 ] else [] end)) as $rules
           | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)
           | (if $agent != "" then .default_agent = $agent else . end)

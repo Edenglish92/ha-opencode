@@ -48,6 +48,8 @@ Deux processus supervisés dans le conteneur :
 2. Installer **OpenCode VS Code Tunnel** (écriture) ou **OpenCode VS Code Tunnel (read-only)**.
 3. Renseigner les options (au minimum `opencode_password`), démarrer.
 4. Au premier démarrage, le journal affiche une URL `https://github.com/login/device` et un code. Saisir le code avec le compte GitHub : le tunnel prend le nom défini dans `tunnel_name`.
+
+   ⚠️ **Faire le pairing tout de suite.** Tant que le compte n'est pas confirmé, ce code reste affiché dans le journal de l'app : quiconque le lit sur `github.com/login/device` avant toi peut réclamer le nom du tunnel, et un tunnel réclamé donne un shell dans le conteneur. Vérifier la liste des tunnels du compte (`code tunnel list`) en cas de doute.
 5. Ouvrir `https://vscode.dev/tunnel/<tunnel_name>/share/opencode`.
 
 Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de tunnel par défaut différents (`opencode` et `opencode-ro`).
@@ -58,13 +60,13 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | --- | --- | --- | --- |
 | `tunnel_name` | texte | `opencode` | Nom du tunnel VS Code. L'URL devient `https://vscode.dev/tunnel/<nom>`. Défaut `opencode-ro` dans l'app read-only. |
 | `accept_license` | booléen | `true` | Accepte les termes de licence du serveur VS Code (`--accept-server-license-terms`). |
-| `opencode_password` | mot de passe | vide | **Obligatoire.** Mot de passe Basic auth de l'API OpenCode (utilisateur : `opencode`). Vide = l'app refuse de démarrer. |
+| `opencode_password` | mot de passe | vide | **Obligatoire.** Mot de passe Basic auth de l'API OpenCode (utilisateur : `opencode`), **16 caractères minimum**. Vide ou trop court = l'app refuse de démarrer. |
 | `public_url` | texte | — | URL publique utilisée par `opencode-pair` pour construire les liens de pairing (ex. `https://opencode.example.com`). |
 | `ha_mcp_url` | mot de passe | vide | URL complète du serveur MCP `ha-mcp` distant (contient un jeton). Vide = la clé `ha-mcp` est retirée de la configuration OpenCode. |
 | `opencode_version` | texte | `2.3.0` | Version d'OpenCode à installer. `latest` interroge l'API GitHub au démarrage. |
 | `default_agent` | texte | `plan` | Agent par défaut écrit dans `opencode.json`. Vide = clé inchangée. |
 | `default_model` | texte | vide | Modèle par défaut, au format `fournisseur/modèle` (ex. `opencode-go/deepseek-v4.1-flash`). Vide = clé inchangée. |
-| `hardening_deny_secrets` | booléen | `true` | Interdit à l'**outil d'édition** d'écrire dans `/config/secrets.yaml`, `/config/.storage/*` et `/data/*` ; demande confirmation avant de lire `secrets.yaml` ; bloque aussi, côté shell, les commandes qui citent `secrets.yaml` ou `.storage`. |
+| `hardening_deny_secrets` | booléen | `true` | Interdit en **lecture et en écriture** `secrets.yaml`, `.storage` et `/data` (seul `~/.opencode/plan` reste accessible, pour l'agent Plan) ; bloque aussi, côté shell, les commandes qui citent ces chemins ou les fichiers d'identifiants de l'app (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`). |
 | `hardening_ask_config_edit` | booléen | `false` | Demande confirmation avant toute édition sous `/config`. |
 | `hardening_ask_shell` | booléen | `false` | Demande confirmation avant toute commande shell. |
 | `seed_agents_md` | booléen | `true` | Crée `/share/opencode/AGENTS.md` au premier démarrage **s'il est absent** ; ne l'écrase jamais. |
@@ -105,15 +107,28 @@ Quand une option `hardening_*` est active, l'app écrit les règles correspondan
   { "action": "edit", "resource": "/config/secrets.yaml", "effect": "deny" },
   { "action": "edit", "resource": "/config/.storage/*", "effect": "deny" },
   { "action": "edit", "resource": "/data/*", "effect": "deny" },
-  { "action": "read", "resource": "/config/secrets.yaml", "effect": "ask" },
+  { "action": "read", "resource": "/config/secrets.yaml", "effect": "deny" },
+  { "action": "read", "resource": "/config/.storage/*", "effect": "deny" },
+  { "action": "read", "resource": "/data/*", "effect": "deny" },
+  { "action": "read", "resource": "/data/home/.opencode/plan/*", "effect": "allow" },
   { "action": "shell", "resource": "*secrets.yaml*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.storage*", "effect": "deny" }
+  { "action": "shell", "resource": "*/.storage*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.config/opencode/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.local/share/opencode/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.vscode/cli/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.copilot/*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.git-credentials*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.opencode-client.env*", "effect": "deny" },
+  { "action": "shell", "resource": "*/.bash_history*", "effect": "deny" },
+  { "action": "shell", "resource": "*/data/options.json*", "effect": "deny" }
 ]
 ```
 
+La seule règle `allow` est volontaire : elle vient **après** le `deny` sur `/data` parce que la dernière règle qui correspond l'emporte, et l'agent Plan enregistre son fichier de plan dans `~/.opencode/plan`. Une règle `allow` placée avant un `deny` n'aurait aucun effet.
+
 Ces règles appartiennent à l'app : les supprimer ou les modifier à la main n'a pas d'effet durable, elles réapparaissent au redémarrage. Pour les changer, utiliser les options de l'app. Les règles portant sur d'autres actions ou chemins sont conservées.
 
-Les permissions filtrent **par outil**. Les deux règles `shell` ci-dessus couvrent les formes simples (`cat`, `sed -i`, `echo >`, `cp`, `grep`, y compris après un `cd /config/.storage`) et **ne bloquent pas** le reste des commandes. Elles restent **best-effort** : un chemin construit (`F=…; cat $F`) ou un outil détourné peut passer. Une édition faite par toi dans VS Code n'est pas concernée non plus. Pour un contrôle plus large, activer `hardening_ask_shell` ; pour une barrière absolue, utiliser l'app read-only.
+Les permissions filtrent **par outil**. Les règles `shell` ci-dessus couvrent les formes simples (`cat`, `sed -i`, `echo >`, `cp`, `grep`, y compris après un `cd /config/.storage`, et les chemins écrits `$HOME/...` puisque le suffixe reste présent) et **ne bloquent pas** le reste des commandes. Elles restent **best-effort** : un chemin construit (`F=…; cat $F`) ou un outil détourné peut passer. Une édition faite par toi dans VS Code n'est pas concernée non plus. Pour un contrôle plus large, activer `hardening_ask_shell` ; pour une barrière absolue, utiliser l'app read-only.
 
 ### Côté HA-MCP
 
@@ -196,9 +211,10 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 
 ## Sécurité
 
-- L'API OpenCode est protégée par **Basic auth** (un seul compte, mot de passe partagé). Il n'y a pas de MFA ni de comptes séparés.
+- L'API OpenCode est protégée par **Basic auth** (un seul compte, mot de passe partagé). Il n'y a pas de MFA ni de comptes séparés. Le mot de passe doit faire **16 caractères minimum** : l'app refuse de démarrer en dessous.
 - Le mot de passe n'est **jamais écrit dans les journaux** : la configuration du service est écrite directement (`service.json`, mode `600`) et les éventuelles occurrences historiques dans le log du service sont expurgées au démarrage.
 - Le tunnel VS Code est lié au compte GitHub/Microsoft utilisé au pairing ; les ports forwardés restent privés.
+- ⚠️ **Le code de pairing du tunnel est affiché dans le journal** tant que le compte n'est pas confirmé. Quiconque le lit sur `github.com/login/device` avant toi réclame le tunnel — et donc un shell dans le conteneur. Faire le pairing immédiatement après le premier démarrage et vérifier `code tunnel list` en cas de doute.
 - L'exposition via Cloudflare doit être accompagnée d'un **rate limiting** sur les chemins d'authentification (période minimale 10 s sur le plan Free).
 - `https://<votre-domaine>` est public et visible dans les journaux de transparence des certificats.
 - L'agent tourne dans le conteneur : pas d'accès à l'hôte, à Docker ou à systemd.
@@ -217,11 +233,12 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 
 | Symptôme | Cause / action |
 | --- | --- |
-| L'app ne démarre pas | `opencode_password` vide : renseigner l'option. |
+| L'app ne démarre pas | `opencode_password` vide ou de moins de 16 caractères : renseigner une valeur plus longue. |
 | Extension OpenCode absente dans VS Code | `install_opencode_extension` désactivé, ou marketplace injoignable au démarrage : lancer `/data/bin/code --install-extension opencode-v2-maker.opencode-v2-vscode --force`. |
 | `opencode mcp list` : « No MCP servers configured » | `ha_mcp_url` vide, ou service non redémarré après la modification de l'option. |
 | MCP absent dans l'app | Résolution par répertoire : vérifier le dossier de la session. |
-| Une édition est refusée sans demande | Règle `deny` de `hardening_deny_secrets` : c'est le comportement attendu pour `secrets.yaml`, `.storage` et `/data`. |
+| Une édition est refusée sans demande | Règle `deny` de `hardening_deny_secrets` : c'est le comportement attendu pour `secrets.yaml`, `.storage` et `/data` (seul `~/.opencode/plan` est autorisé). |
+| Une lecture dans `/data` est refusée | `hardening_deny_secrets` interdit aussi la lecture : c'est voulu, ces fichiers contiennent le mot de passe, le jeton MCP et l'authentification du tunnel. |
 | Une permission personnalisée disparaît | Elle cible un motif géré par l'app : passer par les options `hardening_*`. |
 | Caractères accentués illisibles | Vérifier la locale du terminal. À l'export/import de sessions, éviter de capturer la sortie d'un CLI UTF-8 avec PowerShell 5.1 en CP437 : rediriger via `cmd /c` ou forcer `[Console]::OutputEncoding` en UTF-8. |
 | Notifications de ports forwardés | `remote.autoForwardPorts: false` dans les réglages machine de la machine distante, puis recharger la fenêtre. |

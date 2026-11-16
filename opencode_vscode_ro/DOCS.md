@@ -22,13 +22,13 @@ Cette app est un choix de **lecture et d'action par l'API**, pas un « VS Code d
 
 1. HA → Paramètres → Apps → **Store** → ⋮ → **Dépôts** : `https://github.com/Edenglish92/ha-opencode`.
 2. Installer **OpenCode VS Code Tunnel (read-only)**.
-3. Renseigner `opencode_password`, démarrer, puis suivre l'authentification du tunnel dans le journal.
+3. Renseigner `opencode_password` (**16 caractères minimum**), démarrer, puis suivre l'authentification du tunnel dans le journal. Faire le pairing immédiatement : tant que le compte n'est pas confirmé, le code affiché dans le journal permet à quiconque le lit de réclamer le tunnel (et donc un shell dans le conteneur).
 
 Les deux apps peuvent cohabiter : `/data` est distinct et les noms de tunnel par défaut diffèrent.
 
 ## Durcissement
 
-Les options `hardening_*` restent disponibles. En lecture seule, `hardening_ask_config_edit` devient sans effet (l'écriture échoue de toute façon), et `hardening_deny_secrets` continue de protéger `secrets.yaml`, `.storage` et `/data`.
+Les options `hardening_*` restent disponibles. En lecture seule, `hardening_ask_config_edit` devient sans effet (l'écriture échoue de toute façon), et `hardening_deny_secrets` continue de protéger `secrets.yaml`, `.storage` et `/data` en lecture **et** en écriture.
 
 Le durcissement des écritures **via le MCP** se règle dans HA-MCP : *Read Only Mode*, policies par outil (`ha_manage_security_policy`) ou endpoint `/readonly`.
 
