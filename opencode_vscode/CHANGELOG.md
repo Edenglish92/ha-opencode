@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.8.4
+
+- Security: the critical denies are now written twice — as `permissions` for the
+  interactive `ask`, and as **`policies`** (`tool.use`) for the hard `deny`.
+  Policies are evaluated after every other rule and after saved approvals, and
+  they can never grant, so a project-level `opencode.json` written by the
+  assistant can no longer widen them.
+- Security: `grep` is denied under `hardening_deny_secrets`. Its permission
+  resource is the search pattern, not the path, so a path-based rule never
+  applied and the tool could pull `secrets.yaml` values into the model context.
+- Security: an invalid `opencode.json` is no longer ignored. It is kept as
+  `opencode.json.invalide.<date>` and replaced by a clean file; a failed rewrite
+  now stops the app instead of running without rules.
+- Security: the app log mirror is filtered on the fly (API password and MCP
+  URL), not only cleaned at start; `jq` receives the password and the MCP URL
+  through a mode-600 file instead of the process command line; a malformed
+  `ha_mcp_url` is rejected before it can reach the logs; a failed
+  `service start` is reported instead of being swallowed.
+- Docs: **new "What these rules do not protect" section**. Permissions are a
+  guardrail against accidents, not a confidentiality boundary: a symlink in the
+  workspace reads through a `deny`, `glob` lists names, `shell` rules are
+  substring filters, and the read-only app protects integrity only. A secret
+  that reached the model must be rotated.
+
 ## 0.8.3
 
 - CI: the monthly refresh now triggers the release chain explicitly. A commit

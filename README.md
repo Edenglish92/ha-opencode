@@ -47,7 +47,7 @@ The repository ships **two apps built from the same image** — same features, d
 | **OpenCode VS Code Tunnel** | read-write | You (VS Code, terminal) **and** the assistant can edit Home Assistant files. **Recommended, together with the hardening options.** |
 | **OpenCode VS Code Tunnel (read-only)** | **read-only** | No file edits at all. Everything goes through the Home Assistant API and HA-MCP. |
 
-The read-only mount applies to the **whole container**: VS Code, its terminal and every script see the same read-only `/config`. The read-only app is therefore not "the same app with guardrails for the AI" — it also prevents *you* from editing YAML from VS Code. Use it to consult and act through the API only, and edit files from outside (Samba, File Editor, Studio Code Server).
+The read-only mount applies to the **whole container**: VS Code, its terminal and every script see the same read-only `/config`. The read-only app is therefore not "the same app with guardrails for the AI" — it also prevents *you* from editing YAML from VS Code. Use it to consult and act through the API only, and edit files from outside (Samba, File Editor, Studio Code Server). It protects the **integrity** of your configuration, not its confidentiality: the assistant can still read `/config`, including through the permission gaps listed under [What these rules do not protect](#what-these-rules-do-not-protect).
 
 Both can be installed side by side: each has its own `/data` (and therefore its own session history) and a different default tunnel name (`opencode` and `opencode-ro`). The read-only app does not require a rebuild or a fork — it pulls the exact same image and version.
 
@@ -64,7 +64,7 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 | `opencode_version` | `2.3.0` | OpenCode version to install, or `latest`. |
 | `default_agent` | `plan` | Default agent written to `opencode.json`. Empty leaves the key unchanged. |
 | `default_model` | — | Default model id, e.g. `opencode-go/deepseek-v4.1-flash`. Empty leaves the key unchanged. |
-| `hardening_deny_secrets` | `true` | Deny reading and editing `secrets.yaml`, `.storage` and `/data`; deny shell commands that mention those paths or the app's credential files (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`). |
+| `hardening_deny_secrets` | `true` | Deny reading and editing `secrets.yaml`, `.storage` and `/data`; deny shell commands that mention those paths or the app's credential files (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`); disable the `grep` tool. The critical ones are also written as non-overridable policies. |
 | `hardening_ask_config_edit` | `false` | Ask for approval before any edit under `/config`. |
 | `hardening_ask_shell` | `false` | Ask for approval before shell commands. |
 | `seed_agents_md` | `true` | Create `/share/opencode/AGENTS.md` on first start if missing (never overwritten). |
@@ -83,42 +83,43 @@ This app is a powerful tool: it can edit your Home Assistant configuration and, 
 |---|---|---|
 | `AGENTS.md` and skills | ask for approval, forbid some actions | ❌ the prompt only (advisory) |
 | OpenCode **permissions** (`opencode.json`) | `deny` / `ask` before a tool runs | ✅ the OpenCode runtime |
+| OpenCode **policies** (`opencode.json`) | hard `deny` evaluated after every other rule, never overridable | ✅ the OpenCode runtime |
 | **HA-MCP** policies | read-only mode, per-tool approvals, `/readonly` endpoint | ✅ the HA-MCP server |
 | `/config` **mount** | writes fail at the filesystem level | ✅ the kernel |
 
-`AGENTS.md` is **not a security boundary**: a model mistake or a prompt injection can bypass it. Only permissions, HA-MCP policies and the read-only mount are enforced by the runtime.
+`AGENTS.md` is **not a security boundary**: a model mistake or a prompt injection can bypass it. Only permissions, policies, HA-MCP policies and the read-only mount are enforced by the runtime.
 
 ### Managed permissions
 
-When a `hardening_*` option is enabled, the app writes the matching rules into `/data/home/.config/opencode/opencode.json` **at every start**:
+When a `hardening_*` option is enabled, the app writes the matching rules into `/data/home/.config/opencode/opencode.json` **at every start**: an `permissions` array for `ask`/`deny`, and a `policies` array for the hard denies.
 
 ```jsonc
-"permissions": [
-  { "action": "edit", "resource": "/config/secrets.yaml", "effect": "deny" },
-  { "action": "edit", "resource": "/config/.storage/*", "effect": "deny" },
-  { "action": "edit", "resource": "/data/*", "effect": "deny" },
-  { "action": "read", "resource": "/config/secrets.yaml", "effect": "deny" },
-  { "action": "read", "resource": "/config/.storage/*", "effect": "deny" },
-  { "action": "read", "resource": "/data/*", "effect": "deny" },
-  { "action": "read", "resource": "/data/home/.opencode/plan/*", "effect": "allow" },
-  { "action": "shell", "resource": "*secrets.yaml*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.storage*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.config/opencode/*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.local/share/opencode/*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.vscode/cli/*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.copilot/*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.git-credentials*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.opencode-client.env*", "effect": "deny" },
-  { "action": "shell", "resource": "*/.bash_history*", "effect": "deny" },
-  { "action": "shell", "resource": "*/data/options.json*", "effect": "deny" }
+"policies": [
+  { "action": "tool.use", "resource": "read:/config/secrets.yaml", "effect": "deny" },
+  { "action": "tool.use", "resource": "edit:/config/secrets.yaml", "effect": "deny" },
+  { "action": "tool.use", "resource": "read:/config/.storage/*", "effect": "deny" },
+  { "action": "tool.use", "resource": "read:/data/options.json", "effect": "deny" },
+  { "action": "tool.use", "resource": "shell:*secrets.yaml*", "effect": "deny" },
+  { "action": "tool.use", "resource": "grep:*", "effect": "deny" }
 ]
 ```
 
-The single `allow` rule is deliberate: it sits after the `/data` deny because the last matching rule wins, and the Plan agent stores its plan file under `~/.opencode/plan`. Rules are ordered, so an `allow` placed before a `deny` would have no effect.
+Policies are evaluated after the permission rules, after agent rules and after saved approvals, and they can only deny — never grant. That is what makes them hold when a project-level `opencode.json` (which the assistant is able to write in `/share/opencode`) tries to widen the rules.
 
-These rules belong to the app: editing or removing them by hand has no lasting effect — they are rewritten on the next start. Change the app options instead. Rules that target other actions or paths are preserved.
+`grep` is denied under `hardening_deny_secrets` because its permission resource is the search **pattern**, not the path: a path-based rule is never consulted, so the tool could quietly pull secret values into the model context. Use the shell (`rg`) when you need a search; `hardening_ask_shell` is the real control there.
 
-Permissions are **per tool**. The `shell` rules catch the obvious forms (`cat`, `sed -i`, `echo >`, `cp`, `grep`, including after a `cd /config/.storage`, and `$HOME`-relative paths, which still contain the matched suffix) and leave every other command alone. They remain **best-effort**: a constructed path (`F=…; cat $F`) or a wrapper tool can slip through, and an edit you make yourself in VS Code is not covered. Enable `hardening_ask_shell` for broader control; use the read-only app for a hard filesystem boundary.
+If a policy cannot be applied at start (invalid JSON), the app backs the file up as `opencode.json.invalide.<date>` and rewrites a clean one rather than running without rules; a failed rewrite stops the app instead of leaving it unprotected.
+
+### What these rules do not protect
+
+Stated plainly, because the alternative is a false sense of safety:
+
+- **Permissions are a guardrail against accidents, not a confidentiality boundary.** A symlink created inside the workspace (`ln -s /config/secrets.yaml /share/opencode/x.yaml`) is read as a workspace path; the `deny` on `/config/secrets.yaml` is not consulted. This was measured, not assumed.
+- **`glob` is gated by its pattern too**, so it can list names under `/config/.storage`. It never returns file contents, which is why it stays enabled.
+- **The `shell` rules are substring filters.** A glob (`wc -l /config/secret*.yaml`), a variable (`F=…; cat $F`) or a wrapper evades them. `hardening_ask_shell` is the only broad control.
+- **The read-only app protects integrity, not confidentiality**: it makes writes impossible, it does not hide a single byte.
+
+If a secret was ever displayed to the model, no permission change makes it safe again — rotate it. Treat anything the assistant could read as disclosed.
 
 ### Home Assistant side (HA-MCP)
 

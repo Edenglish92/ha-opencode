@@ -159,116 +159,183 @@ ln -sf /data/bin/opencode-pair /usr/local/bin/opencode-pair
 # ---------------------------------------------------------------------------
 CFG="$HOME/.config/opencode/opencode.json"
 mkdir -p "$(dirname "$CFG")"
-if [ -n "$MCP_URL" ]; then
+
+# Un JSON invalide ne doit pas etre ignore : demarrer sans les regles gerees
+# reviendrait a desactiver le durcissement en silence. On conserve l'original
+# puis on repart d'une base vide, que les blocs suivants reecrivent.
+ensure_valid_config() {
   if [ ! -f "$CFG" ]; then
     echo '{}' > "$CFG"
+    return 0
   fi
   if jq -e . "$CFG" >/dev/null 2>&1; then
-    if jq --arg u "$MCP_URL" \
-        '.mcp.servers["ha-mcp"] = {type:"remote",url:$u,oauth:false,protocol:"auto"}' \
-        "$CFG" > "$CFG.tmp"; then
-      mv "$CFG.tmp" "$CFG"
-      chmod 600 "$CFG"
-      echo "[opencode] MCP ha-mcp configure"
-    else
-      rm -f "$CFG.tmp"
-      echo "[erreur] echec de la fusion MCP (jq)."
-    fi
-  else
-    echo "[erreur] $CFG n'est pas un JSON valide : MCP non configure."
+    return 0
   fi
+  local backup
+  backup="$CFG.invalide.$(date +%Y%m%d-%H%M%S)"
+  mv "$CFG" "$backup"
+  echo '{}' > "$CFG"
+  echo "[avertissement] $CFG n'etait pas un JSON valide : conserve dans $backup, configuration reinitialisee."
+}
+ensure_valid_config
+
+# L'URL contient le jeton : on valide sa forme sans jamais l'afficher, et une
+# valeur invalide est traitee comme absente (la cle MCP obsolete est retiree).
+if [ -n "$MCP_URL" ]; then
+  case "$MCP_URL" in
+    http://*|https://*) ;;
+    *)
+      echo "[erreur] 'ha_mcp_url' doit commencer par http:// ou https:// (valeur non affichee) : MCP non configure."
+      MCP_URL=""
+      ;;
+  esac
+fi
+
+if [ -n "$MCP_URL" ]; then
+  # Le jeton passe par un fichier 600 plutot que par la ligne de commande de
+  # jq, ou /proc/<pid>/cmdline le rendrait visible.
+  MCP_URL_FILE="$(mktemp)"
+  printf '%s' "$MCP_URL" > "$MCP_URL_FILE"
+  if jq --rawfile u "$MCP_URL_FILE" \
+      '.mcp.servers["ha-mcp"] = {type:"remote",url:$u,oauth:false,protocol:"auto"}' \
+      "$CFG" > "$CFG.tmp"; then
+    mv "$CFG.tmp" "$CFG"
+    chmod 600 "$CFG"
+    echo "[opencode] MCP ha-mcp configure"
+  else
+    rm -f "$CFG.tmp"
+    echo "[erreur] echec de la fusion MCP (jq)."
+  fi
+  rm -f "$MCP_URL_FILE"
 else
-  # Option vide : retirer une eventuelle configuration MCP obsolete
-  if [ -f "$CFG" ] && jq -e . "$CFG" >/dev/null 2>&1; then
-    if jq 'del(.mcp.servers["ha-mcp"])' "$CFG" > "$CFG.tmp"; then
-      mv "$CFG.tmp" "$CFG"
-      chmod 600 "$CFG"
-      echo "[opencode] MCP ha-mcp retire (option vide)"
-    else
-      rm -f "$CFG.tmp"
-    fi
+  # Option vide (ou invalide) : retirer une eventuelle configuration obsolete
+  if jq 'del(.mcp.servers["ha-mcp"])' "$CFG" > "$CFG.tmp"; then
+    mv "$CFG.tmp" "$CFG"
+    chmod 600 "$CFG"
+    echo "[opencode] MCP ha-mcp retire (option vide)"
+  else
+    rm -f "$CFG.tmp"
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# Configuration OpenCode : agent et modele par defaut, permissions gerees
-# Les regles gerees sont reecrites a chaque demarrage (l'option fait foi) ;
-# les regles portant sur d'autres actions ou chemins sont conservees.
+# Configuration OpenCode : agent et modele par defaut, permissions et policies
+# gerees. Les regles gerees sont reecrites a chaque demarrage (l'option fait
+# foi) ; les regles portant sur d'autres actions ou chemins sont conservees.
+#
+# Deux niveaux, volontairement :
+#   permissions -> `ask` / `deny`, surchargeables (config de projet, agent) ;
+#   policies    -> `deny` uniquement, evalue apres tout le reste et jamais
+#                  surchargeable. C'est la couche qui tient face a un
+#                  opencode.json de projet ecrit par l'agent lui-meme.
 # ---------------------------------------------------------------------------
 if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
    || [ "$HARDEN_DENY_SECRETS" = "true" ] \
    || [ "$HARDEN_ASK_CONFIG" = "true" ] \
    || [ "$HARDEN_ASK_SHELL" = "true" ]; then
-  if [ ! -f "$CFG" ]; then
-    echo '{}' > "$CFG"
-  fi
-  if jq -e . "$CFG" >/dev/null 2>&1; then
-    if jq \
-        --arg agent "$DEFAULT_AGENT_OPT" \
-        --arg model "$DEFAULT_MODEL_OPT" \
-        --argjson deny_secrets "$HARDEN_DENY_SECRETS" \
-        --argjson ask_config "$HARDEN_ASK_CONFIG" \
-        --argjson ask_shell "$HARDEN_ASK_SHELL" '
-          def managed_rules:
-            [ {action:"shell", resource:"*"},
-              {action:"shell", resource:"*secrets.yaml*"},
-              {action:"shell", resource:"*/.storage*"},
-              {action:"shell", resource:"*/.config/opencode/*"},
-              {action:"shell", resource:"*/.local/share/opencode/*"},
-              {action:"shell", resource:"*/.vscode/cli/*"},
-              {action:"shell", resource:"*/.copilot/*"},
-              {action:"shell", resource:"*/.git-credentials*"},
-              {action:"shell", resource:"*/.opencode-client.env*"},
-              {action:"shell", resource:"*/.bash_history*"},
-              {action:"shell", resource:"*/data/options.json*"},
-              {action:"edit",  resource:"/config/*"},
-              {action:"edit",  resource:"/config/secrets.yaml"},
-              {action:"edit",  resource:"/config/.storage/*"},
-              {action:"edit",  resource:"/data/*"},
-              {action:"read",  resource:"/config/secrets.yaml"},
-              {action:"read",  resource:"/config/.storage/*"},
-              {action:"read",  resource:"/data/*"},
-              {action:"read",  resource:"/data/home/.opencode/plan/*"} ];
-          def is_managed($r):
-            any(managed_rules[]; .action == $r.action and .resource == $r.resource);
+  if jq \
+      --arg agent "$DEFAULT_AGENT_OPT" \
+      --arg model "$DEFAULT_MODEL_OPT" \
+      --argjson deny_secrets "$HARDEN_DENY_SECRETS" \
+      --argjson ask_config "$HARDEN_ASK_CONFIG" \
+      --argjson ask_shell "$HARDEN_ASK_SHELL" '
+        def items($v): ($v // []) | if type == "array" then .[] else empty end;
+        def managed_rules:
+          [ {action:"shell", resource:"*"},
+            {action:"shell", resource:"*secrets.yaml*"},
+            {action:"shell", resource:"*/.storage*"},
+            {action:"shell", resource:"*/.config/opencode/*"},
+            {action:"shell", resource:"*/.local/share/opencode/*"},
+            {action:"shell", resource:"*/.vscode/cli/*"},
+            {action:"shell", resource:"*/.copilot/*"},
+            {action:"shell", resource:"*/.git-credentials*"},
+            {action:"shell", resource:"*/.opencode-client.env*"},
+            {action:"shell", resource:"*/.bash_history*"},
+            {action:"shell", resource:"*/data/options.json*"},
+            {action:"edit",  resource:"/config/*"},
+            {action:"edit",  resource:"/config/secrets.yaml"},
+            {action:"edit",  resource:"/config/.storage/*"},
+            {action:"edit",  resource:"/data/*"},
+            {action:"read",  resource:"/config/secrets.yaml"},
+            {action:"read",  resource:"/config/.storage/*"},
+            {action:"read",  resource:"/data/*"},
+            {action:"read",  resource:"/data/home/.opencode/plan/*"} ];
+        def is_managed($r):
+          any(managed_rules[]; .action == $r.action and .resource == $r.resource);
 
-          . as $cfg
-          | ([ ($cfg.permissions // [])[] | select(is_managed(.) | not) ]
-             + (if $ask_shell then [{action:"shell", resource:"*", effect:"ask"}] else [] end)
-             + (if $ask_config then [{action:"edit", resource:"/config/*", effect:"ask"}] else [] end)
-             + (if $deny_secrets then [
-                  {action:"edit", resource:"/config/secrets.yaml", effect:"deny"},
-                  {action:"edit", resource:"/config/.storage/*", effect:"deny"},
-                  {action:"edit", resource:"/data/*", effect:"deny"},
-                  {action:"read", resource:"/config/secrets.yaml", effect:"deny"},
-                  {action:"read", resource:"/config/.storage/*", effect:"deny"},
-                  {action:"read", resource:"/data/*", effect:"deny"},
-                  {action:"read", resource:"/data/home/.opencode/plan/*", effect:"allow"},
-                  {action:"shell", resource:"*secrets.yaml*", effect:"deny"},
-                  {action:"shell", resource:"*/.storage*", effect:"deny"},
-                  {action:"shell", resource:"*/.config/opencode/*", effect:"deny"},
-                  {action:"shell", resource:"*/.local/share/opencode/*", effect:"deny"},
-                  {action:"shell", resource:"*/.vscode/cli/*", effect:"deny"},
-                  {action:"shell", resource:"*/.copilot/*", effect:"deny"},
-                  {action:"shell", resource:"*/.git-credentials*", effect:"deny"},
-                  {action:"shell", resource:"*/.opencode-client.env*", effect:"deny"},
-                  {action:"shell", resource:"*/.bash_history*", effect:"deny"},
-                  {action:"shell", resource:"*/data/options.json*", effect:"deny"}
-                ] else [] end)) as $rules
-          | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)
-          | (if $agent != "" then .default_agent = $agent else . end)
-          | (if $model != "" then .model = $model else . end)
-        ' "$CFG" > "$CFG.tmp"; then
+        def managed_policies:
+          [ {action:"tool.use", resource:"read:/config/secrets.yaml"},
+            {action:"tool.use", resource:"edit:/config/secrets.yaml"},
+            {action:"tool.use", resource:"read:/config/.storage/*"},
+            {action:"tool.use", resource:"edit:/config/.storage/*"},
+            {action:"tool.use", resource:"read:/data/options.json"},
+            {action:"tool.use", resource:"edit:/data/options.json"},
+            {action:"tool.use", resource:"read:/data/home/.config/opencode/*"},
+            {action:"tool.use", resource:"edit:/data/home/.config/opencode/*"},
+            {action:"tool.use", resource:"read:/data/home/.local/share/opencode/*"},
+            {action:"tool.use", resource:"edit:/data/home/.local/share/opencode/*"},
+            {action:"tool.use", resource:"read:/data/home/.vscode/cli/*"},
+            {action:"tool.use", resource:"edit:/data/home/.vscode/cli/*"},
+            {action:"tool.use", resource:"read:/data/home/.copilot/*"},
+            {action:"tool.use", resource:"edit:/data/home/.copilot/*"},
+            {action:"tool.use", resource:"read:/data/home/.git-credentials"},
+            {action:"tool.use", resource:"edit:/data/home/.git-credentials"},
+            {action:"tool.use", resource:"read:/data/home/.opencode-client.env"},
+            {action:"tool.use", resource:"edit:/data/home/.opencode-client.env"},
+            {action:"tool.use", resource:"read:/data/home/.bash_history"},
+            {action:"tool.use", resource:"edit:/data/home/.bash_history"},
+            {action:"tool.use", resource:"shell:*secrets.yaml*"},
+            {action:"tool.use", resource:"shell:*/.storage*"},
+            {action:"tool.use", resource:"shell:*/.config/opencode/*"},
+            {action:"tool.use", resource:"shell:*/.local/share/opencode/*"},
+            {action:"tool.use", resource:"shell:*/.vscode/cli/*"},
+            {action:"tool.use", resource:"shell:*/.copilot/*"},
+            {action:"tool.use", resource:"shell:*/.git-credentials*"},
+            {action:"tool.use", resource:"shell:*/.opencode-client.env*"},
+            {action:"tool.use", resource:"shell:*/.bash_history*"},
+            {action:"tool.use", resource:"shell:*/data/options.json*"},
+            {action:"tool.use", resource:"grep:*"} ];
+        def is_managed_policy($p):
+          any(managed_policies[]; .action == $p.action and .resource == $p.resource);
+
+        . as $cfg
+        | ([ items($cfg.permissions) | select(is_managed(.) | not) ]
+           + (if $ask_shell then [{action:"shell", resource:"*", effect:"ask"}] else [] end)
+           + (if $ask_config then [{action:"edit", resource:"/config/*", effect:"ask"}] else [] end)
+           + (if $deny_secrets then [
+                {action:"edit", resource:"/config/secrets.yaml", effect:"deny"},
+                {action:"edit", resource:"/config/.storage/*", effect:"deny"},
+                {action:"edit", resource:"/data/*", effect:"deny"},
+                {action:"read", resource:"/config/secrets.yaml", effect:"deny"},
+                {action:"read", resource:"/config/.storage/*", effect:"deny"},
+                {action:"read", resource:"/data/*", effect:"deny"},
+                {action:"read", resource:"/data/home/.opencode/plan/*", effect:"allow"},
+                {action:"shell", resource:"*secrets.yaml*", effect:"deny"},
+                {action:"shell", resource:"*/.storage*", effect:"deny"},
+                {action:"shell", resource:"*/.config/opencode/*", effect:"deny"},
+                {action:"shell", resource:"*/.local/share/opencode/*", effect:"deny"},
+                {action:"shell", resource:"*/.vscode/cli/*", effect:"deny"},
+                {action:"shell", resource:"*/.copilot/*", effect:"deny"},
+                {action:"shell", resource:"*/.git-credentials*", effect:"deny"},
+                {action:"shell", resource:"*/.opencode-client.env*", effect:"deny"},
+                {action:"shell", resource:"*/.bash_history*", effect:"deny"},
+                {action:"shell", resource:"*/data/options.json*", effect:"deny"}
+              ] else [] end)) as $rules
+        | ([ items($cfg.policies) | select(is_managed_policy(.) | not) ]
+           + (if $deny_secrets then [ managed_policies[] | .effect = "deny" ] else [] end)) as $pol
+        | (if ($rules | length) > 0 then .permissions = $rules else del(.permissions) end)
+        | (if ($pol | length) > 0 then .policies = $pol else del(.policies) end)
+        | (if $agent != "" then .default_agent = $agent else . end)
+        | (if $model != "" then .model = $model else . end)
+      ' "$CFG" > "$CFG.tmp"; then
       mv "$CFG.tmp" "$CFG"
       chmod 600 "$CFG"
-      echo "[opencode] agent/modele et permissions mis a jour"
+      echo "[opencode] agent/modele, permissions et policies mis a jour"
     else
       rm -f "$CFG.tmp"
-      echo "[erreur] echec de la fusion agent/permissions (jq)."
+      echo "[erreur] echec de la fusion agent/permissions (jq) : arret pour ne pas demarrer sans regles."
+      exit 1
     fi
-  else
-    echo "[erreur] $CFG n'est pas un JSON valide : agent/permissions non configurees."
-  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -344,25 +411,52 @@ if [ -f "$SVC" ] && jq -e . "$SVC" >/dev/null 2>&1; then
 else
   SVC_BASE='{}'
 fi
-if printf '%s' "$SVC_BASE" | jq --arg p "$PASSWORD" \
+# Le mot de passe passe par un fichier 600 plutot que par la ligne de commande
+# de jq, ou /proc/<pid>/cmdline le rendrait visible le temps de l'appel.
+PASSWORD_FILE="$(mktemp)"
+printf '%s' "$PASSWORD" > "$PASSWORD_FILE"
+if printf '%s' "$SVC_BASE" | jq --rawfile p "$PASSWORD_FILE" \
      '.hostname = "0.0.0.0" | .port = 4096 | .password = $p' > "$SVC.tmp"; then
   mv "$SVC.tmp" "$SVC"
   chmod 600 "$SVC"
 else
   rm -f "$SVC.tmp"
   echo "[erreur] impossible d'écrire $SVC : mot de passe non configuré."
+  rm -f "$PASSWORD_FILE"
   exit 1
 fi
+rm -f "$PASSWORD_FILE"
 
-# Nettoyage des anciennes lignes qui contenaient le mot de passe en clair
+# ---------------------------------------------------------------------------
+# Journal du service : expurgation a la source, puis miroir filtre
+# L'historique est nettoye au demarrage, et le flux continu est filtre avant
+# d'arriver au journal de l'app (visible par tout administrateur HA).
+# ---------------------------------------------------------------------------
 LOG="$HOME/.local/share/opencode/log/opencode.log"
 mkdir -p "$(dirname "$LOG")"
+
+escape_sed() {
+  local value
+  value="$(printf '%s' "$1" | sed 's/[][\\.*^$/&]/\\&/g')"
+  printf '%s' "${value//$'\n'/\\n}"
+}
+
+REDACT=(-e 's/args="\[[^]]*password[^]]*\]"/args="[redacted]"/g')
+if [ -n "$PASSWORD" ]; then
+  REDACT+=(-e "s/$(escape_sed "$PASSWORD")/[redacted]/g")
+fi
+if [ -n "$MCP_URL" ]; then
+  REDACT+=(-e "s/$(escape_sed "$MCP_URL")/[redacted]/g")
+fi
+
 if [ -f "$LOG" ]; then
-  sed -i -E 's/args="\[\\"service\\",\\"set\\",\\"password\\",\\".*\\"\]"/args="[redacted]"/g' "$LOG" || true
+  sed -i "${REDACT[@]}" "$LOG" || true
 fi
 
 echo "[opencode] demarrage du service OpenCode"
-"$OC_BIN" service start || true
+if ! "$OC_BIN" service start; then
+  echo "[avertissement] 'service start' a echoue : on tente le demarrage direct."
+fi
 
 # Laisse au service le temps de demarrer avant de verifier
 sleep 3
@@ -372,11 +466,9 @@ if [ -z "$code" ] || [ "$code" = "000" ]; then
   exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
 fi
 
-# Miroir des logs du service vers le journal de l'app
-LOG="$HOME/.local/share/opencode/log/opencode.log"
-mkdir -p "$(dirname "$LOG")"
+# Miroir des logs du service vers le journal de l'app, filtre en continu
 touch "$LOG"
-tail -n +1 -F "$LOG" &
+tail -n +1 -F "$LOG" | sed -u "${REDACT[@]}" &
 
 # Surveillance : relance le service si le port ne repond plus
 while true; do

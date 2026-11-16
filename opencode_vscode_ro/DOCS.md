@@ -28,7 +28,9 @@ Les deux apps peuvent cohabiter : `/data` est distinct et les noms de tunnel par
 
 ## Durcissement
 
-Les options `hardening_*` restent disponibles. En lecture seule, `hardening_ask_config_edit` devient sans effet (l'écriture échoue de toute façon), et `hardening_deny_secrets` continue de protéger `secrets.yaml`, `.storage` et `/data` en lecture **et** en écriture.
+Les options `hardening_*` restent disponibles. En lecture seule, `hardening_ask_config_edit` devient sans effet (l'écriture échoue de toute façon), et `hardening_deny_secrets` continue de protéger `secrets.yaml`, `.storage` et `/data` en lecture **et** en écriture, et désactive l'outil `grep`.
+
+⚠️ Le montage en lecture seule protège l'**intégrité**, pas la **confidentialité** : l'agent lit toujours `/config`, y compris par un lien symbolique déposé dans l'espace de travail ou une recherche `grep`. Voir « Ce que ces règles ne protègent pas » dans [`opencode_vscode/DOCS.md`](https://github.com/Edenglish92/ha-opencode/blob/main/opencode_vscode/DOCS.md).
 
 Le durcissement des écritures **via le MCP** se règle dans HA-MCP : *Read Only Mode*, policies par outil (`ha_manage_security_policy`) ou endpoint `/readonly`.
 

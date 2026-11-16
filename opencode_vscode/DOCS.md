@@ -66,7 +66,7 @@ Les deux apps peuvent cohabiter : elles ont leur propre `/data`, et des noms de 
 | `opencode_version` | texte | `2.3.0` | Version d'OpenCode à installer. `latest` interroge l'API GitHub au démarrage. |
 | `default_agent` | texte | `plan` | Agent par défaut écrit dans `opencode.json`. Vide = clé inchangée. |
 | `default_model` | texte | vide | Modèle par défaut, au format `fournisseur/modèle` (ex. `opencode-go/deepseek-v4.1-flash`). Vide = clé inchangée. |
-| `hardening_deny_secrets` | booléen | `true` | Interdit en **lecture et en écriture** `secrets.yaml`, `.storage` et `/data` (seul `~/.opencode/plan` reste accessible, pour l'agent Plan) ; bloque aussi, côté shell, les commandes qui citent ces chemins ou les fichiers d'identifiants de l'app (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`). |
+| `hardening_deny_secrets` | booléen | `true` | Interdit en **lecture et en écriture** `secrets.yaml`, `.storage` et `/data` (seul `~/.opencode/plan` reste accessible, pour l'agent Plan) ; bloque aussi, côté shell, les commandes qui citent ces chemins ou les fichiers d'identifiants de l'app (`~/.config/opencode`, `~/.local/share/opencode`, `~/.vscode/cli`, `~/.copilot`, `~/.git-credentials`, `~/.opencode-client.env`) ; désactive l'outil `grep`. Les règles critiques sont aussi écrites en *policies* non surchargeables. |
 | `hardening_ask_config_edit` | booléen | `false` | Demande confirmation avant toute édition sous `/config`. |
 | `hardening_ask_shell` | booléen | `false` | Demande confirmation avant toute commande shell. |
 | `seed_agents_md` | booléen | `true` | Crée `/share/opencode/AGENTS.md` au premier démarrage **s'il est absent** ; ne l'écrase jamais. |
@@ -76,16 +76,17 @@ Le mot de passe et l'URL MCP ne sont jamais affichés dans les journaux.
 
 ## Durcissement
 
-Quatre couches, de la plus souple à la plus dure :
+Cinq couches, de la plus souple à la plus dure :
 
 | Couche | Ce qu'elle fait | Appliquée par |
 | --- | --- | --- |
 | `AGENTS.md` et skills | demandent l'accord, interdisent certains gestes | ❌ le prompt seulement (consultatif) |
 | Permissions OpenCode | `deny` / `ask` avant l'exécution d'un outil | ✅ le runtime OpenCode |
+| Policies OpenCode | `deny` évalué après toutes les autres règles, jamais surchargeable | ✅ le runtime OpenCode |
 | Policies HA-MCP | lecture seule, approbation par outil, endpoint `/readonly` | ✅ le serveur HA-MCP |
 | Montage `/config` | l'écriture échoue au niveau du système de fichiers | ✅ le noyau |
 
-`AGENTS.md` n'est **pas une frontière de sécurité** : une erreur du modèle ou une injection de prompt peut le contourner. Les permissions, les policies HA-MCP et le montage en lecture seule sont les seules barrières réellement appliquées.
+`AGENTS.md` n'est **pas une frontière de sécurité** : une erreur du modèle ou une injection de prompt peut le contourner. Les permissions, les policies, les policies HA-MCP et le montage en lecture seule sont les seules barrières réellement appliquées.
 
 ### Profils
 
@@ -96,7 +97,7 @@ Quatre couches, de la plus souple à la plus dure :
 | lecture seule | écriture | Uniquement les fichiers ; aucune écriture via le MCP. |
 | lecture seule | lecture seule | Lecture intégrale, aucun changement. |
 
-Le profil read-only est le plus strict, mais il change aussi **ton** usage : dans cette app, VS Code ne peut plus modifier la configuration Home Assistant. Si tu veux garder l'édition manuelle dans VS Code, reste sur l'app en écriture avec `hardening_deny_secrets`.
+Le profil read-only est le plus strict, mais il change aussi **ton** usage : dans cette app, VS Code ne peut plus modifier la configuration Home Assistant. Il protège l'**intégrité** de ta configuration, pas sa **confidentialité** — l'assistant lit toujours `/config`, y compris par les angles morts décrits plus bas. Si tu veux garder l'édition manuelle dans VS Code, reste sur l'app en écriture avec `hardening_deny_secrets`.
 
 ### Permissions gérées
 
@@ -129,6 +130,38 @@ La seule règle `allow` est volontaire : elle vient **après** le `deny` sur `/d
 Ces règles appartiennent à l'app : les supprimer ou les modifier à la main n'a pas d'effet durable, elles réapparaissent au redémarrage. Pour les changer, utiliser les options de l'app. Les règles portant sur d'autres actions ou chemins sont conservées.
 
 Les permissions filtrent **par outil**. Les règles `shell` ci-dessus couvrent les formes simples (`cat`, `sed -i`, `echo >`, `cp`, `grep`, y compris après un `cd /config/.storage`, et les chemins écrits `$HOME/...` puisque le suffixe reste présent) et **ne bloquent pas** le reste des commandes. Elles restent **best-effort** : un chemin construit (`F=…; cat $F`) ou un outil détourné peut passer. Une édition faite par toi dans VS Code n'est pas concernée non plus. Pour un contrôle plus large, activer `hardening_ask_shell` ; pour une barrière absolue, utiliser l'app read-only.
+
+### Policies gérées
+
+En plus des permissions, l'app écrit un tableau `policies` dans le même fichier :
+
+```jsonc
+"policies": [
+  { "action": "tool.use", "resource": "read:/config/secrets.yaml", "effect": "deny" },
+  { "action": "tool.use", "resource": "edit:/config/secrets.yaml", "effect": "deny" },
+  { "action": "tool.use", "resource": "read:/config/.storage/*", "effect": "deny" },
+  { "action": "tool.use", "resource": "read:/data/options.json", "effect": "deny" },
+  { "action": "tool.use", "resource": "shell:*secrets.yaml*", "effect": "deny" },
+  { "action": "tool.use", "resource": "grep:*", "effect": "deny" }
+]
+```
+
+Les policies sont évaluées **après** les permissions, après les règles d'agent et après les approbations enregistrées, et elles ne peuvent que refuser — jamais accorder. C'est ce qui les fait tenir face à un `opencode.json` de projet que l'assistant pourrait écrire lui-même dans `/share/opencode` pour élargir ses droits.
+
+L'outil `grep` est désactivé sous `hardening_deny_secrets` parce que sa ressource de permission est le **motif** recherché, pas le chemin : aucune règle de chemin ne s'applique, et l'outil pouvait donc ramener des valeurs de `secrets.yaml` dans le contexte du modèle sans que rien ne le signale. Pour chercher, l'agent passe par le shell (`rg`) ; `hardening_ask_shell` est le vrai levier là.
+
+Si la configuration ne peut pas être appliquée (JSON invalide), l'app conserve l'original en `opencode.json.invalide.<date>` et réécrit un fichier propre plutôt que de démarrer sans règles. Un échec de réécriture arrête l'app au lieu de la laisser sans protection.
+
+### Ce que ces règles ne protègent pas
+
+Dit franchement, parce que l'alternative est une fausse impression de sécurité :
+
+- **Les permissions sont un garde-fou contre les gestes accidentels, pas une barrière de confidentialité.** Un lien symbolique créé dans l'espace de travail (`ln -s /config/secrets.yaml /share/opencode/x.yaml`) est lu comme un chemin de l'espace de travail : le `deny` sur `/config/secrets.yaml` n'est jamais consulté. C'est **mesuré**, pas supposé.
+- **`glob` est filtré par son motif lui aussi**, et peut donc lister les noms sous `/config/.storage`. Il ne renvoie jamais le contenu des fichiers, c'est pourquoi il reste actif.
+- **Les règles `shell` sont des filtres de sous-chaîne.** Un glob (`wc -l /config/secret*.yaml`), une variable (`F=…; cat $F`) ou un outil enrobé les contournent. `hardening_ask_shell` est le seul contrôle large.
+- **L'app read-only protège l'intégrité, pas la confidentialité** : elle rend l'écriture impossible, elle ne cache pas un seul octet.
+
+Si un secret a été affiché au modèle, aucun changement de permission ne le rend inoffensif : il faut le **faire tourner**. Considère comme divulgué tout ce que l'assistant a pu lire.
 
 ### Côté HA-MCP
 
@@ -218,7 +251,9 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 - L'exposition via Cloudflare doit être accompagnée d'un **rate limiting** sur les chemins d'authentification (période minimale 10 s sur le plan Free).
 - `https://<votre-domaine>` est public et visible dans les journaux de transparence des certificats.
 - L'agent tourne dans le conteneur : pas d'accès à l'hôte, à Docker ou à systemd.
-- L'app **read-only** monte `/config` en lecture seule : l'écriture y est impossible, quel que soit l'outil, **y compris VS Code et son terminal**.
+- L'app **read-only** monte `/config` en lecture seule : l'écriture y est impossible, quel que soit l'outil, **y compris VS Code et son terminal**. Elle ne protège pas la **confidentialité** : l'agent lit toujours `/config`.
+- ⚠️ **Aucune permission ne cache `secrets.yaml` à l'agent.** Un lien symbolique déposé dans `/share/opencode` pointe vers `/config/secrets.yaml` et se lit comme un fichier de l'espace de travail ; le `deny` n'est pas consulté. De même, `grep` et `glob` filtrent par motif, et les règles `shell` par sous-chaîne. Ce sont des garde-fous contre les gestes accidentels, pas une isolation.
+- 🔁 **Si un secret a pu être lu par l'agent, fais-le tourner.** Il a quitté la machine dans le contexte du modèle ; aucune règle ne le rattrapera.
 - Ne jamais publier les options `opencode_password` / `ha_mcp_url`, ni l'URL MCP complète.
 
 ## Maintenance
@@ -239,6 +274,9 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 | MCP absent dans l'app | Résolution par répertoire : vérifier le dossier de la session. |
 | Une édition est refusée sans demande | Règle `deny` de `hardening_deny_secrets` : c'est le comportement attendu pour `secrets.yaml`, `.storage` et `/data` (seul `~/.opencode/plan` est autorisé). |
 | Une lecture dans `/data` est refusée | `hardening_deny_secrets` interdit aussi la lecture : c'est voulu, ces fichiers contiennent le mot de passe, le jeton MCP et l'authentification du tunnel. |
+| L'outil `grep` est refusé | Comportement voulu : `grep` filtre par motif, pas par chemin, il pouvait donc lire `secrets.yaml`. Utiliser le shell (`rg`) ou désactiver `hardening_deny_secrets`. |
+| `opencode.json.invalide.<date>` apparaît | La config OpenCode n'était pas un JSON valide : elle a été conservée et remplacée par une base propre, pour ne pas démarrer sans règles. Reporter les réglages nécessaires. |
+| L'app refuse de démarrer après une fusion jq | Le fichier de config n'a pas pu être réécrit : l'app s'arrête plutôt que de tourner sans permissions. Vérifier le journal, restaurer `opencode.json.invalide.<date>` si besoin. |
 | Une permission personnalisée disparaît | Elle cible un motif géré par l'app : passer par les options `hardening_*`. |
 | Caractères accentués illisibles | Vérifier la locale du terminal. À l'export/import de sessions, éviter de capturer la sortie d'un CLI UTF-8 avec PowerShell 5.1 en CP437 : rediriger via `cmd /c` ou forcer `[Console]::OutputEncoding` en UTF-8. |
 | Notifications de ports forwardés | `remote.autoForwardPorts: false` dans les réglages machine de la machine distante, puis recharger la fenêtre. |
