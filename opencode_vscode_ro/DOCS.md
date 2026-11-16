@@ -7,7 +7,7 @@ Variante de **OpenCode VS Code Tunnel** construite depuis la **même image** et 
 | `/share/opencode` | écriture | écriture |
 | `/config` | écriture | **lecture seule** |
 | Tunnel par défaut | `opencode` | `opencode-ro` |
-| Options | 13 | identiques |
+| Options | 14 | identiques |
 
 ## Ce que ça change
 
@@ -20,7 +20,7 @@ Cette app est un choix de **lecture et d'action par l'API**, pas un « VS Code d
 
 ## Installation
 
-1. HA → Paramètres → Apps → **Store** → ⋮ → **Dépôts** : `https://github.com/Edenglish92/ha-opencode`.
+1. HA → Paramètres → Apps → **Store** → ⋮ → **Dépôts** : `https://github.com/Edenglish92/ha-opencode` — ou [ajouter le dépôt en un clic](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FEdenglish92%2Fha-opencode).
 2. Installer **OpenCode VS Code Tunnel (read-only)**.
 3. Renseigner `opencode_password` (**16 caractères minimum**), démarrer, puis suivre l'authentification du tunnel dans le journal. Faire le pairing immédiatement : tant que le compte n'est pas confirmé, le code affiché dans le journal permet à quiconque le lit de réclamer le tunnel (et donc un shell dans le conteneur).
 

@@ -5,6 +5,7 @@
 **An OpenCode server _and_ a VS Code tunnel, side by side, on your Home Assistant box — Raspberry Pi (aarch64) and x86-64.**
 
 [![Home Assistant App](https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FEdenglish92%2Fha-opencode)
 [![Architecture](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue)](https://github.com/Edenglish92/ha-opencode)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Build](https://github.com/Edenglish92/ha-opencode/actions/workflows/build.yml/badge.svg)](https://github.com/Edenglish92/ha-opencode/actions/workflows/build.yml)
@@ -29,7 +30,7 @@
 
 ## 🚀 Quick start
 
-1. **Add this repository** in Home Assistant: *Settings → Apps → App store → ⋮ → Repositories*.
+1. **Add this repository** with [one click](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FEdenglish92%2Fha-opencode), or in Home Assistant: *Settings → Apps → App store → ⋮ → Repositories* and paste `https://github.com/Edenglish92/ha-opencode`.
 2. **Install** `OpenCode VS Code Tunnel` (read-write) or `OpenCode VS Code Tunnel (read-only)` — see [Two profiles](#-two-profiles).
 3. Set **`opencode_password`** — a long random value. The app will not start without it.
 4. **Start** the app and open the **Log** tab.
@@ -44,8 +45,8 @@ The repository ships **two apps built from the same image** — same features, d
 
 | App | `/config` | What it means |
 |---|---|---|
-| **OpenCode VS Code Tunnel** | read-write | You (VS Code, terminal) **and** the assistant can edit Home Assistant files. **Recommended, together with the hardening options.** |
-| **OpenCode VS Code Tunnel (read-only)** | **read-only** | No file edits at all. Everything goes through the Home Assistant API and HA-MCP. |
+| **[OpenCode VS Code Tunnel](opencode_vscode/README.md)** | read-write | You (VS Code, terminal) **and** the assistant can edit Home Assistant files. **Recommended, together with the hardening options.** |
+| **[OpenCode VS Code Tunnel (read-only)](opencode_vscode_ro/README.md)** | **read-only** | No file edits at all. Everything goes through the Home Assistant API and HA-MCP. |
 
 The read-only mount applies to the **whole container**: VS Code, its terminal and every script see the same read-only `/config`. The read-only app is therefore not "the same app with guardrails for the AI" — it also prevents *you* from editing YAML from VS Code. Use it to consult and act through the API only, and edit files from outside (Samba, File Editor, Studio Code Server). It protects the **integrity** of your configuration, not its confidentiality: the assistant can still read `/config`, including through the permission gaps listed under [What these rules do not protect](#what-these-rules-do-not-protect).
 

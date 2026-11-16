@@ -44,7 +44,7 @@ Deux processus supervisés dans le conteneur :
 
 ## Installation
 
-1. HA → Paramètres → Apps → **Store** → ⋮ → **Dépôts** : ajouter `https://github.com/Edenglish92/ha-opencode`.
+1. HA → Paramètres → Apps → **Store** → ⋮ → **Dépôts** : ajouter `https://github.com/Edenglish92/ha-opencode` — ou [ajouter le dépôt en un clic](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FEdenglish92%2Fha-opencode).
 2. Installer **OpenCode VS Code Tunnel** (écriture) ou **OpenCode VS Code Tunnel (read-only)**.
 3. Renseigner les options (au minimum `opencode_password`), démarrer.
 4. Au premier démarrage, le journal affiche une URL `https://github.com/login/device` et un code. Saisir le code avec le compte GitHub : le tunnel prend le nom défini dans `tunnel_name`.
