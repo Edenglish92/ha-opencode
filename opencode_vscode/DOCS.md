@@ -260,6 +260,7 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 
 - **Mise à jour d'OpenCode** : option `opencode_version` (`2.3.0` par défaut, ou `latest`). Un changement de valeur déclenche le téléchargement au prochain démarrage ; `Reconstruire` n'est pas nécessaire tant que le code ne change pas.
 - **CLI VS Code** : téléchargé dans `/data/bin` et comparé au commit stable à chaque démarrage ; il est remplacé si le commit change. Le serveur VS Code se met à jour seul.
+- **Intégrité des téléchargements** : les deux binaires sont vérifiés par leur `sha256` publié par l'éditeur (digest de l'asset de release GitHub pour OpenCode, API de mise à jour VS Code pour le CLI) avant extraction. Un écart rejette l'archive et conserve le binaire installé ; au premier démarrage, un écart arrête l'app.
 - **Mise à jour de l'app** : après une modification de `config.yaml`, `Vérifier les mises à jour` puis `Mettre à jour`. Pour un changement de code sans changement de version, `Reconstruire`.
 - **Versions** : les deux apps partagent la même image et la même version ; le workflow mensuel met à jour les deux `config.yaml`.
 - **Sauvegardes** : les sauvegardes HA incluent les données de l'app (`/data`), donc sessions et configuration OpenCode.
@@ -277,6 +278,8 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 | L'outil `grep` est refusé | Comportement voulu : `grep` filtre par motif, pas par chemin, il pouvait donc lire `secrets.yaml`. Utiliser le shell (`rg`) ou désactiver `hardening_deny_secrets`. |
 | `opencode.json.invalide.<date>` apparaît | La config OpenCode n'était pas un JSON valide : elle a été conservée et remplacée par une base propre, pour ne pas démarrer sans règles. Reporter les réglages nécessaires. |
 | L'app refuse de démarrer après une fusion jq | Le fichier de config n'a pas pu être réécrit : l'app s'arrête plutôt que de tourner sans permissions. Vérifier le journal, restaurer `opencode.json.invalide.<date>` si besoin. |
+| `SHA256 inattendu` dans le journal | L'archive téléchargée ne correspond pas à la somme publiée par l'éditeur : elle est rejetée et le binaire déjà installé est conservé (arrêt au premier démarrage). Vérifier réseau, proxy ou cache. |
+| Le journal de l'app ne montre plus l'historique | Comportement voulu depuis 0.8.5 : le miroir démarre à `tail -n 0`, donc seules les nouvelles lignes apparaissent. L'historique complet reste dans `/data/home/.local/share/opencode/log/opencode.log`. |
 | Une permission personnalisée disparaît | Elle cible un motif géré par l'app : passer par les options `hardening_*`. |
 | Caractères accentués illisibles | Vérifier la locale du terminal. À l'export/import de sessions, éviter de capturer la sortie d'un CLI UTF-8 avec PowerShell 5.1 en CP437 : rediriger via `cmd /c` ou forcer `[Console]::OutputEncoding` en UTF-8. |
 | Notifications de ports forwardés | `remote.autoForwardPorts: false` dans les réglages machine de la machine distante, puis recharger la fenêtre. |

@@ -44,21 +44,71 @@ case "$(uname -m)" in
 esac
 
 # ---------------------------------------------------------------------------
+# Verification d'integrite des binaires telecharges
+# 0 = somme verifiee, 2 = aucune somme publiee (avertissement), 1 = ecart
+# ---------------------------------------------------------------------------
+verify_sha256() {
+  local file="$1" expected="$2" label="$3" actual
+  if [ -z "$expected" ]; then
+    echo "[avertissement] $label : aucune somme SHA256 publiee, integrite non verifiee."
+    return 2
+  fi
+  actual="$(sha256sum "$file" | awk '{print $1}')"
+  if [ "$actual" != "$expected" ]; then
+    echo "[erreur] $label : SHA256 inattendu (attendu ${expected}, obtenu ${actual})."
+    return 1
+  fi
+  echo "[opencode] $label : SHA256 verifie."
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # CLI VS Code (non embarque dans l'image ; rafraichi si le commit change)
+# L'API de mise a jour publie le commit ET la somme SHA256 de l'archive :
+# on s'en sert pour decider du rafraichissement et pour verifier le fichier.
 # ---------------------------------------------------------------------------
 CLI=/data/bin/code
-CLI_URL="https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-${ARCH}"
-REMOTE_COMMIT="$(curl -sIL -o /dev/null -w '%{url_effective}' "$CLI_URL" 2>/dev/null | sed -n 's|.*/stable/\([0-9a-f]\{40\}\).*|\1|p' || true)"
+CLI_META_URL="https://update.code.visualstudio.com/api/update/cli-alpine-${ARCH}/stable/latest"
+CLI_META="$(curl -fsSL --max-time 20 "$CLI_META_URL" 2>/dev/null || true)"
+REMOTE_COMMIT="$(printf '%s' "$CLI_META" | jq -r '.version // empty' 2>/dev/null || true)"
+CLI_SHA="$(printf '%s' "$CLI_META" | jq -r '.sha256hash // empty' 2>/dev/null || true)"
+CLI_URL="$(printf '%s' "$CLI_META" | jq -r '.url // empty' 2>/dev/null || true)"
+if [ -z "$CLI_URL" ]; then
+  # API injoignable : ancienne resolution par redirection, sans somme.
+  CLI_URL="https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-${ARCH}"
+  REMOTE_COMMIT="$(curl -sIL -o /dev/null -w '%{url_effective}' "$CLI_URL" 2>/dev/null | sed -n 's|.*/stable/\([0-9a-f]\{40\}\).*|\1|p' || true)"
+fi
 LOCAL_COMMIT="$(cat /data/bin/code.commit 2>/dev/null || true)"
 
 if [ ! -x "$CLI" ] || { [ -n "$REMOTE_COMMIT" ] && [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; }; then
   echo "[opencode] telechargement du CLI VS Code (${ARCH})..."
-  curl -fsSL "$CLI_URL" -o /tmp/vscode-cli.tgz
-  tar -xzf /tmp/vscode-cli.tgz -C /data/bin
-  chmod +x "$CLI"
-  rm -f /tmp/vscode-cli.tgz
-  if [ -n "$REMOTE_COMMIT" ]; then
-    printf '%s\n' "$REMOTE_COMMIT" > /data/bin/code.commit
+  if curl -fsSL --max-time 300 "$CLI_URL" -o /tmp/vscode-cli.tgz; then
+    rc=0
+    verify_sha256 /tmp/vscode-cli.tgz "$CLI_SHA" "CLI VS Code" || rc=$?
+    if [ "$rc" -eq 1 ]; then
+      rm -f /tmp/vscode-cli.tgz
+      if [ -x "$CLI" ]; then
+        echo "[avertissement] archive rejetee : on conserve le CLI installe."
+      else
+        echo "[erreur] archive du CLI VS Code rejetee (somme incorrecte) : arret."
+        exit 1
+      fi
+    else
+      tar -xzf /tmp/vscode-cli.tgz -C /data/bin
+      chmod +x "$CLI"
+      rm -f /tmp/vscode-cli.tgz
+      if [ -n "$REMOTE_COMMIT" ]; then
+        printf '%s\n' "$REMOTE_COMMIT" > /data/bin/code.commit
+      fi
+    fi
+  else
+    rm -f /tmp/vscode-cli.tgz
+    if [ -x "$CLI" ]; then
+      echo "[avertissement] telechargement du CLI VS Code echoue : on conserve la version installee."
+    else
+      echo "[erreur] CLI VS Code indisponible : arret."
+      exit 1
+    fi
   fi
 fi
 
@@ -80,9 +130,11 @@ fi
 # ---------------------------------------------------------------------------
 OC_BIN=/data/bin/opencode
 OC_VERSION="$OC_VERSION_OPT"
+OC_API="https://api.github.com/repos/anomalyco/opencode/releases"
+RELEASE_JSON=""
 if [ "$OC_VERSION" = "latest" ]; then
-  OC_VERSION="$(curl -fsSL https://api.github.com/repos/anomalyco/opencode/releases/latest \
-    | jq -r '.tag_name // empty' | sed 's/^v//' || true)"
+  RELEASE_JSON="$(curl -fsSL --max-time 20 "$OC_API/latest" 2>/dev/null || true)"
+  OC_VERSION="$(printf '%s' "$RELEASE_JSON" | jq -r '.tag_name // empty' 2>/dev/null | sed 's/^v//' || true)"
 fi
 if [ -z "$OC_VERSION" ]; then
   echo "[erreur] impossible de determiner la version d'OpenCode."
@@ -92,11 +144,41 @@ fi
 INSTALLED_VERSION="$(cat /data/bin/opencode.version 2>/dev/null || true)"
 if [ ! -x "$OC_BIN" ] || [ "$INSTALLED_VERSION" != "$OC_VERSION" ]; then
   echo "[opencode] telechargement d'OpenCode v${OC_VERSION} (linux-${ARCH})..."
-  curl -fsSL "https://github.com/anomalyco/opencode/releases/download/v${OC_VERSION}/opencode-linux-${ARCH}.tar.gz" -o /tmp/opencode.tgz
-  tar -xzf /tmp/opencode.tgz -C /data/bin
-  chmod +x "$OC_BIN"
-  rm -f /tmp/opencode.tgz
-  printf '%s\n' "$OC_VERSION" > /data/bin/opencode.version
+  OC_ASSET="opencode-linux-${ARCH}.tar.gz"
+  # GitHub publie un digest sha256 par asset de release : on compare.
+  if [ -z "$RELEASE_JSON" ]; then
+    RELEASE_JSON="$(curl -fsSL --max-time 20 "$OC_API/tags/v${OC_VERSION}" 2>/dev/null || true)"
+  fi
+  OC_SHA="$(printf '%s' "$RELEASE_JSON" | jq -r --arg n "$OC_ASSET" \
+    '.assets[]? | select(.name == $n) | .digest // empty' 2>/dev/null | sed 's/^sha256://' || true)"
+  if curl -fsSL --max-time 300 \
+      "https://github.com/anomalyco/opencode/releases/download/v${OC_VERSION}/${OC_ASSET}" \
+      -o /tmp/opencode.tgz; then
+    rc=0
+    verify_sha256 /tmp/opencode.tgz "$OC_SHA" "OpenCode ${OC_VERSION}" || rc=$?
+    if [ "$rc" -eq 1 ]; then
+      rm -f /tmp/opencode.tgz
+      if [ -x "$OC_BIN" ]; then
+        echo "[avertissement] archive rejetee : on conserve OpenCode installe."
+      else
+        echo "[erreur] archive d'OpenCode rejetee (somme incorrecte) : arret."
+        exit 1
+      fi
+    else
+      tar -xzf /tmp/opencode.tgz -C /data/bin
+      chmod +x "$OC_BIN"
+      rm -f /tmp/opencode.tgz
+      printf '%s\n' "$OC_VERSION" > /data/bin/opencode.version
+    fi
+  else
+    rm -f /tmp/opencode.tgz
+    if [ -x "$OC_BIN" ]; then
+      echo "[avertissement] telechargement d'OpenCode echoue : on conserve la version installee."
+    else
+      echo "[erreur] OpenCode indisponible : arret."
+      exit 1
+    fi
+  fi
 fi
 ln -sf "$OC_BIN" /usr/local/bin/opencode
 
@@ -458,17 +540,30 @@ if ! "$OC_BIN" service start; then
   echo "[avertissement] 'service start' a echoue : on tente le demarrage direct."
 fi
 
-# Laisse au service le temps de demarrer avant de verifier
-sleep 3
-code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:4096/api/info || true)
-if [ -z "$code" ] || [ "$code" = "000" ]; then
-  echo "[opencode] service manage indisponible : repli sur 'serve'"
+# Le service peut mettre plus de trois secondes sur un Pi : sonder jusqu'a
+# 30 s avant de conclure, sinon le repli 'serve' tente de binder le meme port
+# qu'un service simplement lent.
+attempt=0
+ready=""
+while [ "$attempt" -lt 30 ]; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:4096/api/info || true)
+  if [ -n "$code" ] && [ "$code" != "000" ]; then
+    ready=1
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 1
+done
+if [ -z "$ready" ]; then
+  echo "[opencode] service manage indisponible apres 30 s : repli sur 'serve'"
   exec "$OC_BIN" serve --hostname 0.0.0.0 --port 4096
 fi
 
-# Miroir des logs du service vers le journal de l'app, filtre en continu
+# Miroir des logs du service vers le journal de l'app, filtre en continu.
+# -n 0 : seules les nouvelles lignes, sinon chaque demarrage rejoue tout
+# l'historique de opencode.log dans le journal de l'app.
 touch "$LOG"
-tail -n +1 -F "$LOG" | sed -u "${REDACT[@]}" &
+tail -n 0 -F "$LOG" | sed -u "${REDACT[@]}" &
 
 # Surveillance : relance le service si le port ne repond plus
 while true; do

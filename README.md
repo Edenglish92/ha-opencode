@@ -154,8 +154,9 @@ Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
 
 - **OpenCode**: change `opencode_version` and restart; the binary is downloaded only when the version changes.
 - **VS Code CLI**: compared with the current stable commit at every start, replaced automatically when it changes.
+- **Download integrity**: both binaries are verified against the `sha256` published by their vendor (the GitHub release asset digest for OpenCode, the VS Code update API for the CLI) before extraction. A mismatch rejects the archive and keeps the installed binary; a first install with a mismatch stops the app.
 - **App**: `Check for updates` → `Update` after a `config.yaml` change; `Rebuild` for code changes.
-- **Monthly refresh**: a scheduled workflow bumps the patch version of **both apps** on the 1st of each month, then publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date.
+- **Monthly refresh**: a scheduled workflow bumps the patch version of **both apps** on the 1st of each month, then publishes fresh images (Debian base and packages). Dependabot keeps the GitHub Actions up to date, and every action is pinned by commit SHA.
 
   The chain is explicit, because a commit pushed with `GITHUB_TOKEN` does **not** trigger workflows: the refresh job dispatches Lint on the new commit, Lint must pass, and only then does Build publish the image for `amd64` and `aarch64`. A manual Build run is accepted only for a commit that already has a successful Lint run, and a final job fails if the version tag is missing from the registry. To re-run after a failure: `gh workflow run lint.yml --ref main` (or re-run the failed Build job from the Actions tab).
 - **Changelog**: `CHANGELOG.md` is mirrored into each app folder, because the Home Assistant update dialog reads it there. CI fails if the copies diverge.

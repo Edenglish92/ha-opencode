@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.5
+
+- Security: the downloaded binaries are verified before extraction. OpenCode is
+  checked against the `sha256` digest GitHub publishes for its release asset,
+  and the VS Code CLI against the `sha256hash` of the VS Code update API. A
+  mismatch rejects the archive and keeps the installed binary; on a first
+  install it stops the app. Archives are no longer extracted unverified as
+  root.
+- CI: every GitHub Action is pinned by commit SHA instead of a mutable tag
+  (Dependabot still updates them).
+- Startup: the service is probed for up to 30 seconds instead of a fixed 3, so
+  a slow start no longer races with the `serve` fallback on the same port.
+- Logs: the app log mirror starts at `tail -n 0`, so a restart no longer
+  replays the whole `opencode.log` history into the app log. The full history
+  stays in the file.
+- Docs: integrity checks, the new log behaviour, and troubleshooting rows.
+
 ## 0.8.4
 
 - Security: the critical denies are now written twice — as `permissions` for the
