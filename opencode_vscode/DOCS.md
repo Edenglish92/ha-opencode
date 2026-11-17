@@ -263,6 +263,19 @@ Ce provisionnement ne crée **pas** l'intégration de conversation Home Assistan
 
 L'app **possède** la clé `agents.assist` : elle est réécrite à chaque démarrage et supprimée si `assist_agent_enabled` est à `false`. Les autres agents définis par l'utilisateur sont conservés.
 
+### Intégration de conversation (optionnelle)
+
+Le dépôt fournit aussi le composant HA `opencode_assist`, qui relie Assist à cet agent. Il n'est **pas installé par l'app** : il écrit dans `/config` et impose un redémarrage de Home Assistant.
+
+1. Depuis l'app en **écriture** : `/share/ha-opencode/deploy/install-assist.sh` (en profil read-only, copier via Samba ou File Editor).
+2. Redémarrer Home Assistant.
+3. *Paramètres → Appareils et services → Ajouter une intégration → **OpenCode Assist*** : hôte `7d771edf-opencode-vscode`, port `4096`, mot de passe OpenCode, agent `assist`, dossier `/share/opencode`.
+4. Dans Assist, choisir **OpenCode Assist** comme agent de conversation.
+
+Réservé aux administrateurs par défaut. Une session OpenCode par conversation HA (TTL 6 h), délai de réponse 60 s. Retrait : `deploy/install-assist.sh --uninstall` puis redémarrage.
+
+En cas d'échec, l'agent répond par un message explicite : serveur indisponible, mot de passe refusé, ou délai dépassé.
+
 ## Sécurité
 
 - L'API OpenCode est protégée par **Basic auth** (un seul compte, mot de passe partagé). Il n'y a pas de MFA ni de comptes séparés. Le mot de passe doit faire **16 caractères minimum** : l'app refuse de démarrer en dessous.

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.4
+
+- New Home Assistant integration **`opencode_assist`**: a `conversation` agent
+  that forwards Assist turns to the dedicated OpenCode `assist` agent. One
+  OpenCode session per HA conversation (6 h TTL), Basic auth, response timeout,
+  administrators only by default, configurable directory and allowed user IDs.
+- Deployed with `deploy/install-assist.sh` (`--check`, `--uninstall`). The app
+  does not install it: it writes to `/config`, and Home Assistant must be
+  restarted. The read-only app cannot deploy it from inside the container.
+- The component version is checked against the app version in CI, and its Python
+  syntax and JSON files are validated.
+- Docs: install, options, failure modes.
+
 ## 0.9.3
 
 - The `assist` agent now runs on **Claude Haiku 5.5**. Assist answers are short

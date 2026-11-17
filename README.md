@@ -54,6 +54,17 @@ Both can be installed side by side: each has its own `/data` (and therefore its 
 
 What changes **through HA-MCP** is configured in HA-MCP itself, not in this app: see [Security](#-security).
 
+## 🧠 Assist integration (optional)
+
+The repository also ships a Home Assistant custom integration, `opencode_assist`, that forwards Assist text turns to the read-only OpenCode `assist` agent. It is **not installed by the app**: it writes to `/config`, and Home Assistant must be restarted.
+
+1. From the **read-write** app, deploy the component: `/share/ha-opencode/deploy/install-assist.sh` (the read-only profile cannot write `/config`; copy it with Samba or File Editor instead).
+2. Restart Home Assistant.
+3. *Settings → Devices & Services → Add integration → **OpenCode Assist***: host `7d771edf-opencode-vscode`, port `4096`, your `opencode_password`, agent `assist`, directory `/share/opencode`.
+4. In Assist, select **OpenCode Assist** as the conversation agent.
+
+Administrators only by default. One OpenCode session per HA conversation (6 h TTL), 60 s timeout by default. Remove it with `deploy/install-assist.sh --uninstall` and restart Home Assistant.
+
 ## ⚙️ Configuration
 
 | Option | Default | Description |

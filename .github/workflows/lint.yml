@@ -31,6 +31,10 @@ jobs:
       - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38  # 2.0.0
         with:
           scandir: "./opencode_vscode"
+      - name: ShellCheck deploy scripts
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38  # 2.0.0
+        with:
+          scandir: "./deploy"
 
   hadolint:
     name: Hadolint
@@ -77,6 +81,35 @@ jobs:
 
       - name: Validate assist agent JSON
         run: jq -e . opencode_vscode/config/assist-agent.json >/dev/null
+
+      - name: Compare component version
+        run: |
+          app="$(sed -n 's/^version:[[:space:]]*"\(.*\)"$/\1/p' opencode_vscode/config.yaml | head -n1)"
+          component="$(jq -r '.version' integrations/opencode_assist/manifest.json)"
+          echo "app=${app:-?} component=${component:-?}"
+          if [ -z "$app" ] || [ "$app" != "$component" ]; then
+            echo "::error::Component version ($component) must match the app version ($app)"
+            exit 1
+          fi
+
+  python:
+    name: Python syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.14"
+      - name: Compile the integration
+        run: python -m compileall -q integrations/opencode_assist
+      - name: Validate JSON files
+        run: |
+          for file in \
+            integrations/opencode_assist/manifest.json \
+            integrations/opencode_assist/strings.json \
+            integrations/opencode_assist/translations/fr.json; do
+            jq -e . "$file" >/dev/null
+          done
 
   changelog:
     name: Changelog copies match

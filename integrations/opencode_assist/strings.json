@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OpenCode Assist",
+        "description": "Connect Assist to the OpenCode server. The agent must already exist (default: assist).",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "password": "OpenCode password",
+          "agent": "Agent",
+          "directory": "Session directory",
+          "allowed_users": "Allowed user IDs (comma separated, empty = all admins)",
+          "prompt_timeout": "Response timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the OpenCode server.",
+      "invalid_auth": "The OpenCode password was refused."
+    },
+    "abort": {
+      "already_configured": "This OpenCode server is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OpenCode Assist options",
+        "data": {
+          "agent": "Agent",
+          "directory": "Session directory",
+          "allowed_users": "Allowed user IDs (comma separated, empty = all admins)",
+          "prompt_timeout": "Response timeout (seconds)"
+        }
+      }
+    }
+  }
+}
