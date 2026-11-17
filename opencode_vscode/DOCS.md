@@ -301,6 +301,18 @@ En cas d'échec, l'agent répond par un message explicite : serveur indisponible
 - 🔁 **Si un secret a pu être lu par l'agent, fais-le tourner.** Il a quitté la machine dans le contexte du modèle ; aucune règle ne le rattrapera.
 - Ne jamais publier les options `opencode_password` / `ha_mcp_url`, ni l'URL MCP complète.
 
+### Vérifier l'origine de l'image
+
+Les images publiées sont signées avec **cosign keyless** (Sigstore) : chaque architecture et l'index multi-arch. La signature est liée au workflow `build.yml` du dépôt et au commit qui a construit l'image ; la référence et le digest de l'image de base sont enregistrés en labels OCI (`org.opencontainers.image.base.name` / `.digest`). La CI vérifie les signatures avant de créer la release.
+
+```bash
+cosign verify ghcr.io/edenglish92/opencode-vscode-tunnel:<version> \
+  --certificate-identity-regexp 'https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Aucune clé à gérer : les signatures sont inscrites dans le journal de transparence de Sigstore. Le Supervisor ne les vérifie pas — c'est une garantie pour toi et pour la CI, pas un contrôle automatique à l'installation.
+
 ## Maintenance
 
 - **Mise à jour d'OpenCode** : option `opencode_version` (`2.3.0` par défaut, ou `latest`). Un changement de valeur déclenche le téléchargement au prochain démarrage ; `Reconstruire` n'est pas nécessaire tant que le code ne change pas.

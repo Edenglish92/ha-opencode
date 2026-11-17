@@ -119,6 +119,22 @@ jobs:
         with:
           ref: ${{ needs.gate.outputs.sha }}
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+
+      - name: Resolve base image digest
+        id: base
+        run: |
+          ref="ghcr.io/home-assistant/${{ matrix.arch }}-base-debian:bookworm"
+          digest="$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}')"
+          if [ -z "$digest" ]; then
+            echo "::error::Cannot resolve the digest of $ref"
+            exit 1
+          fi
+          echo "Base $ref -> $digest"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
       - name: Build image
         uses: home-assistant/builder/actions/build-image@7412f0023ea9b6e58e8bb5059f1660f51376f49a  # 2026.09.0
         with:
@@ -134,7 +150,10 @@ jobs:
           context: opencode_vscode
           build-args: |
             BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base-debian:bookworm
-          cosign: "false"
+          cosign: "true"
+          labels: |
+            org.opencontainers.image.base.name=${{ steps.base.outputs.ref }}
+            org.opencontainers.image.base.digest=${{ steps.base.outputs.digest }}
 
   manifest:
     name: Publish multi-arch manifest
@@ -246,3 +265,22 @@ jobs:
             done
           done
           exit "$status"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Verify image signatures
+        env:
+          VERSION: ${{ needs.init.outputs.version }}
+        run: |
+          set -euo pipefail
+          identity='^https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@.*$'
+          issuer="https://token.actions.githubusercontent.com"
+          for image in "${REGISTRY_USER}/${IMAGE_NAME}" \
+                       "${REGISTRY_USER}/amd64-${IMAGE_NAME}" \
+                       "${REGISTRY_USER}/arm64-${IMAGE_NAME}"; do
+            echo "Verifying ghcr.io/${image}:${VERSION}"
+            cosign verify "ghcr.io/${image}:${VERSION}" \
+              --certificate-identity-regexp "$identity" \
+              --certificate-oidc-issuer "$issuer" >/dev/null
+          done

@@ -170,6 +170,18 @@ What the assistant may change **through HA-MCP** is configured in **HA-MCP**, no
 - 📦 The container has no access to the host, Docker or systemd.
 - 🙈 Never share `opencode_password` or `ha_mcp_url`: the MCP URL contains a token.
 
+## 🔏 Image provenance
+
+Published images are signed with **cosign keyless** (Sigstore): each architecture and the multi-arch index. The signature is tied to this repository's `build.yml` workflow and to the commit that built the image; the base image reference and digest are recorded as OCI labels (`org.opencontainers.image.base.name` and `.digest`). CI verifies the signatures before creating a release.
+
+```bash
+cosign verify ghcr.io/edenglish92/opencode-vscode-tunnel:<version> \
+  --certificate-identity-regexp 'https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+No key to manage: signatures are recorded in Sigstore's transparency log. The Supervisor does not check them — this is a guarantee for you and for CI, not an automatic gate at install time.
+
 ## 🧭 Architecture
 
 ```

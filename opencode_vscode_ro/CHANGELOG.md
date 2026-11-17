@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.6
+
+- Every image is now signed with **cosign keyless** (Sigstore): each
+  architecture and the multi-arch index. CI verifies the signatures before
+  publishing the release, so an unsigned tag cannot be released.
+- The base image reference and digest are recorded as OCI labels
+  (`org.opencontainers.image.base.name` and `.digest`) for traceability.
+- Docs: how to verify an image, and what the signature guarantees (and does
+  not: the Supervisor does not check it at install time).
+
 ## 0.9.5
 
 - Fix the timeout path of `opencode_assist`: a timed-out turn left the OpenCode
