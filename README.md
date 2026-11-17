@@ -30,6 +30,14 @@
 | 📱 **Companion app ready** | Pair the OpenCode mobile app with `opencode-pair` (link + QR code). |
 | 🛠️ **Config access** | Two profiles from one image: `/config` read-write (recommended, with hardening) or **read-only** for API-only use. |
 
+## 📸 What it looks like
+
+<p align="center">
+  <img src="docs/images/assist-example.png" alt="Assist answering with live sensor values through the OpenCode agent" width="560">
+</p>
+
+Assist answers with real entity states through the read-only agent — something the native intent-based agent cannot do.
+
 ## 🚀 Quick start
 
 1. **Add this repository** with [one click](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FEdenglish92%2Fha-opencode), or in Home Assistant: *Settings → Apps → App store → ⋮ → Repositories* and paste `https://github.com/Edenglish92/ha-opencode`.
@@ -70,6 +78,10 @@ The repository also ships a Home Assistant custom integration, `opencode_assist`
 | "Which automations use this entity?" | no | searches the configuration and lists them |
 
 It stays read-only: 13 allowed tools, no service call, no file access. Short French answers; typical turns finish in a few seconds on Haiku 5.5.
+
+| Configuration | Failure handling |
+|---|---|
+| <img src="docs/images/assist-configuration.png" alt="OpenCode Assist selected as the conversation agent" width="360"> | <img src="docs/images/assist-timeout.png" alt="Assist showing the timeout message" width="360"> |
 
 1. From the **read-write** app, deploy the component: `/share/ha-opencode/deploy/install-assist.sh` (the read-only profile cannot write `/config`; copy it with Samba or File Editor instead).
 2. Restart Home Assistant.
@@ -205,6 +217,7 @@ Client (VS Code)        ──► Microsoft dev tunnel    ──► code tunnel
   The chain is explicit, because a commit pushed with `GITHUB_TOKEN` does **not** trigger workflows: the refresh job dispatches Lint on the new commit, Lint must pass, and only then does Build publish the image for `amd64` and `aarch64`. A manual Build run is accepted only for a commit that already has a successful Lint run, and a final job fails if the version tag is missing from the registry. To re-run after a failure: `gh workflow run lint.yml --ref main` (or re-run the failed Build job from the Actions tab).
 - **Changelog**: `CHANGELOG.md` is mirrored into each app folder, because the Home Assistant update dialog reads it there. CI fails if the copies diverge.
 - **Backups**: Home Assistant backups include the app's `/data` (sessions, configuration, tunnel auth).
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md), and the [releases](https://github.com/Edenglish92/ha-opencode/releases) carry the same notes.
 
 ## 📄 License
 
