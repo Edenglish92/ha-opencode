@@ -278,7 +278,7 @@ jobs:
           issuer="https://token.actions.githubusercontent.com"
           for image in "${REGISTRY_USER}/${IMAGE_NAME}" \
                        "${REGISTRY_USER}/amd64-${IMAGE_NAME}" \
-                       "${REGISTRY_USER}/arm64-${IMAGE_NAME}"; do
+                       "${REGISTRY_USER}/aarch64-${IMAGE_NAME}"; do
             echo "Verifying ghcr.io/${image}:${VERSION}"
             cosign verify "ghcr.io/${image}:${VERSION}" \
               --certificate-identity-regexp "$identity" \
