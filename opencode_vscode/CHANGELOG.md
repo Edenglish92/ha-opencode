@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.5
+
+- Fix the timeout path of `opencode_assist`: a timed-out turn left the OpenCode
+  session cached and busy, so the next question could hit a 409. The session is
+  now forgotten and deleted best-effort, and a 409 on prompt creates a fresh
+  session and retries once.
+
 ## 0.9.4
 
 - New Home Assistant integration **`opencode_assist`**: a `conversation` agent

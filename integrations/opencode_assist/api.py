@@ -31,6 +31,10 @@ class OpenCodeSessionGone(OpenCodeError):
     """The OpenCode session no longer exists."""
 
 
+class OpenCodeBusy(OpenCodeError):
+    """The OpenCode session is still running another turn."""
+
+
 class OpenCodeClient:
     """Talk to the OpenCode server with Basic auth."""
 
@@ -63,7 +67,7 @@ class OpenCodeClient:
             session_id = await self._async_session(conversation_id, agent, directory)
             try:
                 await self._async_prompt(session_id, text)
-            except OpenCodeSessionGone:
+            except (OpenCodeSessionGone, OpenCodeBusy):
                 session_id = await self._async_create(agent, directory)
                 self._sessions[conversation_id] = (session_id, time.monotonic())
                 await self._async_prompt(session_id, text)
@@ -72,6 +76,13 @@ class OpenCodeClient:
                 async with asyncio.timeout(timeout):
                     await self._async_wait(session_id, timeout)
             except TimeoutError as err:
+                # The turn may still run server-side: drop the session so the
+                # next question starts clean, and delete it best effort.
+                self._sessions.pop(conversation_id, None)
+                try:
+                    await self._async_request("DELETE", f"/api/session/{session_id}")
+                except OpenCodeError:
+                    pass
                 raise OpenCodeTimeoutError from err
             return await self._async_last_text(session_id)
     async def _async_session(self, conversation_id: str, agent: str, directory: str) -> str:
@@ -163,6 +174,8 @@ class OpenCodeClient:
                     raise OpenCodeAuthError
                 if response.status == 404 and session_gone:
                     raise OpenCodeSessionGone
+                if response.status == 409:
+                    raise OpenCodeBusy
                 if response.status >= 400:
                     raise OpenCodeError(f"HTTP {response.status}")
                 if response.status == 204:
