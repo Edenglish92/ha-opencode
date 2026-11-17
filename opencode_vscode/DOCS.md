@@ -256,7 +256,7 @@ Les serveurs MCP sont résolus **par répertoire** : le panneau MCP ne montre qu
 L'app provisionne un agent OpenCode dédié, **`assist`**, dans `/data/home/.config/opencode/opencode.json` (clé `agents.assist`) :
 
 - **lecture seule** : `deny` global, puis 13 outils `ha-mcp` en lecture (états, historique, diagnostics, lectures de configuration, `ha_eval_template`) ;
-- modèle = `default_model` de l'app s'il est renseigné, sinon celui du fichier d'agent ;
+- modèle **Claude Haiku 5.5** (`opencode-go/claude-haiku-5-5`), indépendant de `default_model` : le modèle de code reste celui de l'app ;
 - prompt français, réponses courtes, aucune action : sur une demande de commande, il rappelle l'état courant et renvoie vers l'agent Assist natif.
 
 Ce provisionnement ne crée **pas** l'intégration de conversation Home Assistant : l'agent est disponible dans OpenCode (sélecteur d'agent, `opencode run --agent assist`). L'intégration `opencode_assist` (entité `conversation.opencode` dans Assist) est livrée séparément.

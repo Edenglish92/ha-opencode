@@ -543,7 +543,7 @@ if [ -n "$DEFAULT_AGENT_OPT$DEFAULT_MODEL_OPT" ] \
         | (if $agent != "" then .default_agent = $agent else . end)
         | (if $model != "" then .model = $model else . end)
         | (if $assist and ($assistfile | length) > 0 then
-             .agents.assist = ($assistfile[0] | if $model != "" then .model = $model else . end)
+             .agents.assist = $assistfile[0]
            else del(.agents.assist) end)
         | (if (.agents // {}) == {} then del(.agents) else . end)
       ' "$CFG" > "$CFG.tmp"; then

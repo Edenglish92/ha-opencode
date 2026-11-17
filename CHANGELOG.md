@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.3
+
+- The `assist` agent now runs on **Claude Haiku 5.5**. Assist answers are short
+  and tool loops are few, so a fast, concise model fits better; Haiku is no
+  longer overridden by `default_model`, which stays the coding agent's model.
+- Docs: the Assist model is independent from `default_model`.
+
 ## 0.9.2
 
 - Fix: the workspace shell patterns are broadened to `*.opencode*`, so
