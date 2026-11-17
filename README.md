@@ -24,6 +24,7 @@
 | 🔗 **Shared workspace** | `/share/opencode` is visible from both sides, so the extension and the server see the same paths. |
 | 🔐 **Password protected** | The OpenCode API requires Basic auth (`opencode` + your password). The app refuses to start without it. |
 | 🧩 **Home Assistant MCP** | Point `ha_mcp_url` at your `ha-mcp` server and the assistant can drive Home Assistant. |
+| 🗣️ **Smarter Assist** | Optional conversation agent: OpenCode + Haiku answers with real tool use — states, history, logs, configuration — instead of the native fixed intents. Read-only by design. |
 | 🔌 **Extension included** | The OpenCode V2 extension is installed into the VS Code server on first start (disable with `install_opencode_extension`). |
 | 📱 **Companion app ready** | Pair the OpenCode mobile app with `opencode-pair` (link + QR code). |
 | 🛠️ **Config access** | Two profiles from one image: `/config` read-write (recommended, with hardening) or **read-only** for API-only use. |
@@ -57,6 +58,17 @@ What changes **through HA-MCP** is configured in HA-MCP itself, not in this app:
 ## 🧠 Assist integration (optional)
 
 The repository also ships a Home Assistant custom integration, `opencode_assist`, that forwards Assist text turns to the read-only OpenCode `assist` agent. It is **not installed by the app**: it writes to `/config`, and Home Assistant must be restarted.
+
+**Why bother?** The built-in Assist understands a fixed set of intents ("turn on the kitchen light", "what time is it"). It cannot search your entities, read history, inspect a log or explain a configuration. With this integration, Assist gets a real read-only agent:
+
+| Question | Native Assist | OpenCode Assist |
+|---|---|---|
+| "Turn off the kitchen light" | runs the intent | says it is read-only, gives the current state, points to the native agent |
+| "What is the temperature upstairs?" | no | finds the sensors and answers with the values |
+| "Why did the heating run at 3 am?" | no | reads history, traces and logs, then explains |
+| "Which automations use this entity?" | no | searches the configuration and lists them |
+
+It stays read-only: 13 allowed tools, no service call, no file access. Short French answers; typical turns finish in a few seconds on Haiku 5.5.
 
 1. From the **read-write** app, deploy the component: `/share/ha-opencode/deploy/install-assist.sh` (the read-only profile cannot write `/config`; copy it with Samba or File Editor instead).
 2. Restart Home Assistant.

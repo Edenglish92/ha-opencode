@@ -259,13 +259,24 @@ L'app provisionne un agent OpenCode dédié, **`assist`**, dans `/data/home/.con
 - modèle **Claude Haiku 5.5** (`opencode-go/claude-haiku-5-5`), indépendant de `default_model` : le modèle de code reste celui de l'app ;
 - prompt français, réponses courtes, aucune action : sur une demande de commande, il rappelle l'état courant et renvoie vers l'agent Assist natif.
 
-Ce provisionnement ne crée **pas** l'intégration de conversation Home Assistant : l'agent est disponible dans OpenCode (sélecteur d'agent, `opencode run --agent assist`). L'intégration `opencode_assist` (entité `conversation.opencode` dans Assist) est livrée séparément.
+L'agent est utilisable directement dans OpenCode (sélecteur d'agent, `opencode run --agent assist`). Pour l'utiliser depuis **Assist**, le composant `opencode_assist` décrit ci-dessous crée l'entité `conversation.opencode_assist`.
 
 L'app **possède** la clé `agents.assist` : elle est réécrite à chaque démarrage et supprimée si `assist_agent_enabled` est à `false`. Les autres agents définis par l'utilisateur sont conservés.
 
 ### Intégration de conversation (optionnelle)
 
 Le dépôt fournit aussi le composant HA `opencode_assist`, qui relie Assist à cet agent. Il n'est **pas installé par l'app** : il écrit dans `/config` et impose un redémarrage de Home Assistant.
+
+**Pourquoi l'ajouter ?** L'agent natif d'Assist ne comprend qu'un ensemble fini d'intents. Ce composant donne à Assist un agent en lecture seule capable de chercher, comparer et expliquer :
+
+| Question | Assist natif | OpenCode Assist |
+|---|---|---|
+| « Éteins la lumière du salon » | exécute l'intent | rappelle qu'il est en lecture seule, donne l'état courant, renvoie vers l'agent natif |
+| « Quelle est la température au premier étage ? » | non | trouve les capteurs et répond avec les valeurs |
+| « Pourquoi le chauffage a tourné à 3 h ? » | non | lit l'historique, les traces et les logs, puis explique |
+| « Quelles automatisations utilisent cette entité ? » | non | cherche dans la configuration et les liste |
+
+13 outils autorisés, aucun appel de service, aucun accès fichier. Réponses courtes en français ; un tour prend quelques secondes avec Haiku 5.5.
 
 1. Depuis l'app en **écriture** : `/share/ha-opencode/deploy/install-assist.sh` (en profil read-only, copier via Samba ou File Editor).
 2. Redémarrer Home Assistant.
