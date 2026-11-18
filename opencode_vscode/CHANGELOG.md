@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.7
+
+- Each architecture now publishes a signed **SPDX SBOM** and a build
+  **provenance** attestation (repository, commit, workflow, base image), using
+  cosign keyless like the image signatures.
+- CI verifies both attestation types before creating the release.
+- Docs: verify or download the SBOM and the provenance.
+
 ## 0.9.6
 
 - Every image is now signed with **cosign keyless** (Sigstore): each

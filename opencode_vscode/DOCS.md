@@ -313,6 +313,17 @@ cosign verify ghcr.io/edenglish92/opencode-vscode-tunnel:<version> \
 
 Aucune clé à gérer : les signatures sont inscrites dans le journal de transparence de Sigstore. Le Supervisor ne les vérifie pas — c'est une garantie pour toi et pour la CI, pas un contrôle automatique à l'installation.
 
+Chaque architecture porte aussi deux attestations signées : un **SBOM SPDX** (les paquets contenus dans l'image) et un prédicat de **provenance** (dépôt, commit, workflow, image de base). Elles sont attachées par architecture :
+
+```bash
+cosign verify-attestation ghcr.io/edenglish92/amd64-opencode-vscode-tunnel:<version> \
+  --type spdxjson \
+  --certificate-identity-regexp 'https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+`--type slsaprovenance` pour la provenance ; `cosign download attestation <image>` pour lire le SBOM.
+
 ## Maintenance
 
 - **Mise à jour d'OpenCode** : option `opencode_version` (`2.3.0` par défaut, ou `latest`). Un changement de valeur déclenche le téléchargement au prochain démarrage ; `Reconstruire` n'est pas nécessaire tant que le code ne change pas.

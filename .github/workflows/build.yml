@@ -135,7 +135,17 @@ jobs:
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
+      - name: Check whether this version is already published
+        id: published
+        run: |
+          if docker buildx imagetools inspect "${{ matrix.image }}:${{ needs.init.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build image
+        id: build
         uses: home-assistant/builder/actions/build-image@7412f0023ea9b6e58e8bb5059f1660f51376f49a  # 2026.09.0
         with:
           arch: ${{ matrix.arch }}
@@ -154,6 +164,71 @@ jobs:
           labels: |
             org.opencontainers.image.base.name=${{ steps.base.outputs.ref }}
             org.opencontainers.image.base.digest=${{ steps.base.outputs.digest }}
+
+      - name: Generate SPDX SBOM
+        if: steps.published.outputs.exists == 'false'
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+        with:
+          image: ${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.arch }}.spdx.json
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          dependency-snapshot: false
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Install cosign for attestations
+        if: steps.published.outputs.exists == 'false'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Attest SBOM
+        if: steps.published.outputs.exists == 'false'
+        run: |
+          cosign attest --yes \
+            --type spdxjson \
+            --predicate "sbom-${{ matrix.arch }}.spdx.json" \
+            "${{ matrix.image }}@${{ steps.build.outputs.digest }}"
+
+      - name: Attest provenance
+        if: steps.published.outputs.exists == 'false'
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          VERSION: ${{ needs.init.outputs.version }}
+          RUN_ID: ${{ github.run_id }}
+          ARCH: ${{ matrix.arch }}
+          BASE_REF: ${{ steps.base.outputs.ref }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          sha256="${BASE_DIGEST#sha256:}"
+          jq -n \
+            --arg builder "https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@${SHA}" \
+            --arg sha "$SHA" \
+            --arg version "$VERSION" \
+            --arg run "$RUN_ID" \
+            --arg arch "$ARCH" \
+            --arg base "$BASE_REF" \
+            --arg base_digest "$sha256" \
+            '{
+              builder: {id: $builder},
+              buildType: "https://github.com/Edenglish92/ha-opencode/build/v1",
+              invocation: {
+                configSource: {
+                  uri: "git+https://github.com/Edenglish92/ha-opencode@refs/heads/main",
+                  digest: {sha1: $sha},
+                  entryPoint: ".github/workflows/build.yml"
+                },
+                parameters: {arch: $arch, version: $version, base: $base}
+              },
+              metadata: {
+                buildInvocationId: $run,
+                completeness: {parameters: true, environment: false, materials: false},
+                reproducible: false
+              },
+              materials: [{uri: $base, digest: {sha256: $base_digest}}]
+            }' > provenance.json
+          cosign attest --yes --type slsaprovenance --predicate provenance.json \
+            "${{ matrix.image }}@${{ steps.build.outputs.digest }}"
 
   manifest:
     name: Publish multi-arch manifest
@@ -283,4 +358,22 @@ jobs:
             cosign verify "ghcr.io/${image}:${VERSION}" \
               --certificate-identity-regexp "$identity" \
               --certificate-oidc-issuer "$issuer" >/dev/null
+          done
+
+      - name: Verify SBOM and provenance attestations
+        env:
+          VERSION: ${{ needs.init.outputs.version }}
+        run: |
+          set -euo pipefail
+          identity='^https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@.*$'
+          issuer="https://token.actions.githubusercontent.com"
+          for image in "${REGISTRY_USER}/amd64-${IMAGE_NAME}" \
+                       "${REGISTRY_USER}/aarch64-${IMAGE_NAME}"; do
+            for type in spdxjson slsaprovenance; do
+              echo "Verifying ${type} attestation on ghcr.io/${image}:${VERSION}"
+              cosign verify-attestation "ghcr.io/${image}:${VERSION}" \
+                --type "$type" \
+                --certificate-identity-regexp "$identity" \
+                --certificate-oidc-issuer "$issuer" >/dev/null
+            done
           done

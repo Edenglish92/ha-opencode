@@ -195,6 +195,17 @@ cosign verify ghcr.io/edenglish92/opencode-vscode-tunnel:<version> \
 
 No key to manage: signatures are recorded in Sigstore's transparency log. The Supervisor does not check them — this is a guarantee for you and for CI, not an automatic gate at install time.
 
+Each architecture also carries two signed attestations: an **SPDX SBOM** (the packages inside the image) and a build **provenance** predicate (repository, commit, workflow, base image). Attestations are attached per architecture:
+
+```bash
+cosign verify-attestation ghcr.io/edenglish92/amd64-opencode-vscode-tunnel:<version> \
+  --type spdxjson \
+  --certificate-identity-regexp 'https://github.com/Edenglish92/ha-opencode/.github/workflows/build.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Use `--type slsaprovenance` for the provenance, and `cosign download attestation <image> --predicate` to read the SBOM itself.
+
 ## 🧭 Architecture
 
 ```
