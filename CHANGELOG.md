@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.8
+
+- Fix `opencode-pair` and `opencode-client` failing with "Server at
+  http://127.0.0.1:4096 requires a password; set OPENCODE_PASSWORD". Both
+  wrappers sourced the client env file but did not export
+  `OPENCODE_PASSWORD`, so the CLI could not authenticate when connecting
+  with `--server`. They now export it, falling back to
+  `OPENCODE_SERVER_PASSWORD` for older env files.
+
 ## 0.9.7
 
 - Each architecture now publishes a signed **SPDX SBOM** and a build

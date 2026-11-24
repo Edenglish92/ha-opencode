@@ -9,6 +9,6 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Edenglish92/ha-opencode/issues",
   "requirements": [],
-  "version": "0.9.7",
+  "version": "0.9.8",
   "homeassistant": "2026.11.0"
 }
