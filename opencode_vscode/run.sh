@@ -235,6 +235,8 @@ chmod 600 "$HOME/.opencode-client.env"
 cat > /data/bin/opencode-client <<'EOF'
 #!/bin/sh
 . /data/home/.opencode-client.env
+OPENCODE_PASSWORD="${OPENCODE_PASSWORD:-$OPENCODE_SERVER_PASSWORD}"
+export OPENCODE_PASSWORD
 case " $* " in
   *" --server "*) exec /data/bin/opencode "$@" ;;
   *)              exec /data/bin/opencode --server http://127.0.0.1:4096 "$@" ;;
@@ -246,6 +248,8 @@ chmod 700 /data/bin/opencode-client
 cat > /data/bin/opencode-pair <<'EOF'
 #!/bin/sh
 . /data/home/.opencode-client.env
+OPENCODE_PASSWORD="${OPENCODE_PASSWORD:-$OPENCODE_SERVER_PASSWORD}"
+export OPENCODE_PASSWORD
 URL="${OPENCODE_PUBLIC_URL:-}"
 URL="${URL%/}"
 if [ -z "$URL" ]; then
